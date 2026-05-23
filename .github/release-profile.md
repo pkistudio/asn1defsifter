@@ -5,6 +5,7 @@
 - GitHub repository: `pkistudio/asn1defsifter`
 - Product name: `ASN.1 Definition Sifter`
 - npm package name: `@pkistudio/asn1defsifter`
+- Hosted Pages URL: `https://pkistudio.github.io/asn1defsifter/`
 - Documentation path: `docs/`
 - ADR path: `docs/adr/`
 
@@ -31,6 +32,15 @@
 - npm publication requires explicit user approval.
 - GitHub Release requires explicit user approval.
 - Stable published tags should have a GitHub Release marked as latest unless instructed otherwise.
+- WordPress post workflow: `.github/workflows/publish-release-to-wordpress.yml`
+- WordPress post title pattern: `ASN.1 Definition Sifter <tag> をリリースしました`
+- WordPress posting requires the configured repository secrets and release publication event or manual workflow dispatch.
+
+## Pages And Wiki
+
+- Pages workflow: `.github/workflows/pages.yml`
+- Pages URL: `https://pkistudio.github.io/asn1defsifter/`
+- Pages artifact path: `pages-dist`
 
 ## Special Hooks
 
