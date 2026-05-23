@@ -255,6 +255,7 @@ export function initAsn1DefinitionSifter(options: Asn1DefinitionSifterAppOptions
   });
   document.addEventListener('click', (event) => {
     if (!app.contains(event.target as Node)) return;
+    if (!(event.target as HTMLElement).closest('.ads-tree-alternatives')) closeAlternativeMenus();
     if (event.target === loadButton || loadMenu.contains(event.target as Node)) return;
     loadMenu.hidden = true;
     loadButton.setAttribute('aria-expanded', 'false');
@@ -339,21 +340,22 @@ function createSubtreeNode(node: SubtreeDisplayNode, selectedSubtreeCandidates: 
   });
   bindSummarySelection(summary, () => selectCandidate(createSubtreeSelection(selectedCandidate, subtree), summary));
   const icon = summary.querySelector<HTMLElement>('.ads-tree-icon');
-  icon?.addEventListener('click', (event) => {
-    event.preventDefault();
-    event.stopPropagation();
-    const shouldShow = alternatives.hidden;
-    details.open = true;
-    alternatives.hidden = !shouldShow;
-  });
-  details.append(summary);
   const alternatives = createAlternativeList(subtree, selectedSubtreeCandidates, (candidate, selectedElement) => {
     selectedSubtreeCandidates.set(subtree.path, candidateKey(candidate));
     updateSummary(summary, formatCandidateName(candidate), `${subtree.path} · ${formatScore(candidate.score)} · ${candidate.confidence}`);
     updateAlternativeChecks(alternatives, candidate);
+    alternatives.hidden = true;
     selectCandidate(createSubtreeSelection(candidate, subtree), selectedElement);
   });
-  details.append(alternatives);
+  icon?.addEventListener('click', (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    closeAlternativeMenus(alternatives);
+    const shouldShow = alternatives.hidden;
+    alternatives.hidden = !shouldShow;
+  });
+  summary.append(alternatives);
+  details.append(summary);
   const list = document.createElement('div');
   list.className = 'ads-tree-children';
   for (const child of node.children) list.append(createSubtreeNode(child, selectedSubtreeCandidates, selectCandidate));
@@ -364,6 +366,7 @@ function createSubtreeNode(node: SubtreeDisplayNode, selectedSubtreeCandidates: 
 function createAlternativeList(subtree: CandidateReportSubtree, selectedSubtreeCandidates: Map<string, string>, selectAlternative: (candidate: Candidate, selectedElement: HTMLElement) => void): HTMLElement {
   const list = document.createElement('div');
   list.className = 'ads-tree-alternatives';
+  list.setAttribute('role', 'menu');
   list.hidden = true;
   for (const candidate of sortCandidatesByScore(subtree.candidates)) list.append(createCandidateNode(candidate, subtree, selectedSubtreeCandidates, selectAlternative));
   return list;
@@ -373,11 +376,23 @@ function createCandidateNode(candidate: Candidate, subtree: CandidateReportSubtr
   const item = document.createElement('button');
   item.className = 'ads-tree-item ads-candidate-item';
   item.type = 'button';
+  item.setAttribute('role', 'menuitemradio');
   item.dataset.candidateKey = candidateKey(candidate);
+  item.setAttribute('aria-checked', candidateKey(candidate) === candidateKey(getSelectedSubtreeCandidate(subtree, selectedSubtreeCandidates)) ? 'true' : 'false');
   item.append(createDisclosure(false), createTreeIcon('leaf'), createTreeLabel(formatCandidateName(candidate)), createTreeNote(`${formatScore(candidate.score)} · ${candidate.confidence}`));
   item.prepend(createCheckmark(candidateKey(candidate) === candidateKey(getSelectedSubtreeCandidate(subtree, selectedSubtreeCandidates))));
-  item.addEventListener('click', () => selectAlternative(candidate, item));
+  item.addEventListener('click', (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    selectAlternative(candidate, item);
+  });
   return item;
+}
+
+function closeAlternativeMenus(except?: HTMLElement): void {
+  for (const menu of document.querySelectorAll<HTMLElement>('.ads-tree-alternatives')) {
+    if (menu !== except) menu.hidden = true;
+  }
 }
 
 function buildSubtreeTree(subtrees: CandidateReportSubtree[]): SubtreeDisplayNode[] {
@@ -430,6 +445,7 @@ function updateAlternativeChecks(container: HTMLElement, selectedCandidate: Cand
   for (const item of container.querySelectorAll<HTMLElement>('.ads-candidate-item')) {
     const checkmark = item.querySelector<HTMLElement>('.ads-tree-checkmark');
     if (checkmark) checkmark.textContent = item.dataset.candidateKey === selectedKey ? '✓' : '';
+    item.setAttribute('aria-checked', item.dataset.candidateKey === selectedKey ? 'true' : 'false');
   }
 }
 
