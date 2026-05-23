@@ -1,11 +1,8 @@
-import { createPkiComponentCorpus, findAsn1Candidates, parseInputToTlvNodes } from '../dist/index.js';
+import { createCandidateReport } from '../dist/index.js';
 
 const input = '300d06092a864886f70d01010b0500';
-const [node] = await parseInputToTlvNodes(input, { format: 'hex' });
-const candidates = findAsn1Candidates(node, {
-  schemaCorpus: createPkiComponentCorpus(),
-  maxResults: 5
-});
+const report = await createCandidateReport(input, { parseOptions: { format: 'hex' }, maxResults: 5 });
+const candidates = report.roots[0]?.candidates ?? [];
 
 const best = candidates[0];
 if (!best || best.typeName !== 'AlgorithmIdentifier') {

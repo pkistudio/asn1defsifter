@@ -52,6 +52,19 @@ Candidate results include:
 
 Use `parseAsn1DefinitionCorpus(source)` when you want to match against your own ASN.1 module definitions instead of the built-in PKI component corpus.
 
+For agent or workbench integrations, `createCandidateReport()` wraps parsing, feature extraction, candidate ranking, and document hypotheses into one JSON-friendly result:
+
+```ts
+import { createCandidateReport } from '@pkistudio/asn1defsifter';
+
+const report = await createCandidateReport('300d06092a864886f70d01010b0500', {
+	parseOptions: { format: 'hex' },
+	maxResults: 5
+});
+
+console.log(report.roots[0].candidates[0]);
+```
+
 ## Relationship To PkiStudio Projects
 
 PkiStudioJS remains the low-level DER/BER/PEM/base64/HEX parser, serializer, viewer, and DER re-encoder. ASN.1 Instance Builder remains the schema-aware definition parser, validator, and DER builder.
@@ -79,6 +92,8 @@ npm test
 npm run build
 npm run smoke
 ```
+
+The smoke command builds the package and runs a real DER hex fragment through the public API. It should report `PkiComponents.AlgorithmIdentifier` as the best candidate.
 
 For package or release-related changes, also run:
 

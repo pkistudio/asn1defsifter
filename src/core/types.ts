@@ -132,4 +132,23 @@ export interface DocumentHypothesis {
   alternatives: Candidate[];
 }
 
+export interface CandidateReportOptions {
+  schemaCorpus?: SchemaCorpusInput;
+  maxResults?: number;
+  parseOptions?: Record<string, unknown>;
+  includeNodes?: boolean;
+}
+
+export interface CandidateReportRoot {
+  index: number;
+  node?: TlvNode;
+  features: TlvFeatures;
+  candidates: Candidate[];
+  hypotheses: DocumentHypothesis[];
+}
+
+export interface CandidateReport {
+  roots: CandidateReportRoot[];
+}
+
 export type { Asn1Field, Asn1SchemaModule, Asn1Type, Asn1TypeDefinition } from '@pkistudio/asn1instancebuilder';
