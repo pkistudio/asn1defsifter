@@ -67,6 +67,17 @@ const candidates = findAsn1Candidates(node, {
 });
 ```
 
+For PKI-only report generation, `createPkiCandidateReport()` and `createPkiCandidateReportFromNodes()` apply the built-in PKI corpus automatically:
+
+```ts
+import { createPkiCandidateReport } from '@pkistudio/asn1defsifter';
+
+const report = await createPkiCandidateReport(input, {
+	profiles: ['x509', 'pkcs8'],
+	minScore: 0.8
+});
+```
+
 For agent or workbench integrations, `createCandidateReport()` wraps parsing, feature extraction, candidate ranking, and document hypotheses into one JSON-friendly result:
 
 ```ts

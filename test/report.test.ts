@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { createCandidateReport, createCandidateReportFromNodes } from '../src/core';
-import { bitString, nullNode, oid, sequence } from './fixtures';
+import { createCandidateReport, createCandidateReportFromNodes, createPkiCandidateReport, createPkiCandidateReportFromNodes } from '../src/core';
+import { bitString, integer, nullNode, octetString, oid, sequence } from './fixtures';
 
 describe('createCandidateReport', () => {
   it('creates an agent-friendly report from DER hex input', async () => {
@@ -103,5 +103,27 @@ describe('createCandidateReport', () => {
 
     expect(report.roots[0].candidates.map((candidate) => candidate.typeName)).toEqual(['SubjectPublicKeyInfo']);
     expect(report.roots[0].subtrees?.[0].candidates.map((candidate) => candidate.typeName)).toEqual(['AlgorithmIdentifier']);
+  });
+
+  it('creates PKI reports with profile presets from input', async () => {
+    const report = await createPkiCandidateReport('300d06092a864886f70d01010b0500', {
+      parseOptions: { format: 'hex' },
+      profiles: 'components',
+      maxResults: 3
+    });
+
+    expect(report.roots[0].summary.bestCandidate?.typeName).toBe('AlgorithmIdentifier');
+    expect(report.roots[0].candidates.map((candidate) => candidate.typeName)).toContain('AlgorithmIdentifier');
+  });
+
+  it('creates PKI reports from nodes with profile presets', () => {
+    const node = sequence([integer(), sequence([oid('1.2.840.113549.1.1.1'), nullNode()]), octetString()]);
+    const report = createPkiCandidateReportFromNodes(node, {
+      profiles: 'pkcs8',
+      minScore: 0.9,
+      maxResults: 5
+    });
+
+    expect(report.roots[0].candidates.map((candidate) => candidate.typeName)).toEqual(['PrivateKeyInfo']);
   });
 });
