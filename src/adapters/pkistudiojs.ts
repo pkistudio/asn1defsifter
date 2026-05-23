@@ -24,8 +24,12 @@ interface PkiStudioParseResult {
   nodes?: PkiStudioLikeNode[];
 }
 
+interface PkiStudioCoreModule {
+  parseInput(input: unknown, options?: Record<string, unknown>): unknown;
+}
+
 export async function parseInputToTlvNodes(input: unknown, options?: Record<string, unknown>): Promise<TlvNode[]> {
-  const core = await import('@pkistudio/pkistudiojs/core');
+  const core = await loadPkiStudioCore();
   const parsed = core.parseInput(input, options) as PkiStudioParseResult;
   return (parsed.nodes ?? []).map(pkistudioNodeToTlvNode);
 }
@@ -40,11 +44,16 @@ export function pkistudioNodeToTlvNode(node: PkiStudioLikeNode): TlvNode {
     valueBytes: normalizeBytes(node.valueBytes ?? node.contentBytes),
     encodedBytes: normalizeBytes(node.bytes),
     value: node.value,
-    oid: node.oid ?? node.oidValue,
+    oid: node.oid ?? node.oidValue ?? decodeOidFromNode(node),
     children: node.children?.map(pkistudioNodeToTlvNode),
     start: node.start,
     end: node.end
   };
+}
+
+async function loadPkiStudioCore(): Promise<PkiStudioCoreModule> {
+  const imported = await import('@pkistudio/pkistudiojs/core');
+  return ('default' in imported ? imported.default : imported) as PkiStudioCoreModule;
 }
 
 function normalizeTagClass(value: string | number | undefined): TlvTagClass {
@@ -58,4 +67,28 @@ function normalizeTagClass(value: string | number | undefined): TlvTagClass {
 function normalizeBytes(value: Uint8Array | number[] | undefined): Uint8Array | undefined {
   if (!value) return undefined;
   return value instanceof Uint8Array ? value : new Uint8Array(value);
+}
+
+function decodeOidFromNode(node: PkiStudioLikeNode): string | undefined {
+  if ((node.tagNumber ?? node.tag) !== 6) return undefined;
+  const bytes = normalizeBytes(node.valueBytes ?? node.contentBytes);
+  if (!bytes || bytes.length === 0) return undefined;
+  return decodeOid(bytes);
+}
+
+function decodeOid(bytes: Uint8Array): string | undefined {
+  const values: number[] = [];
+  let current = 0;
+  for (const byte of bytes) {
+    current = current * 128 + (byte & 0x7f);
+    if ((byte & 0x80) === 0) {
+      values.push(current);
+      current = 0;
+    }
+  }
+  if (values.length === 0) return undefined;
+  const first = values[0];
+  const firstArc = first < 40 ? 0 : first < 80 ? 1 : 2;
+  const secondArc = first - firstArc * 40;
+  return [firstArc, secondArc, ...values.slice(1)].join('.');
 }

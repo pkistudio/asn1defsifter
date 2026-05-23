@@ -1,3 +1,6 @@
 declare module '@pkistudio/pkistudiojs/core' {
-  export function parseInput(input: unknown, options?: Record<string, unknown>): unknown;
+  const core: {
+    parseInput(input: unknown, options?: Record<string, unknown>): unknown;
+  };
+  export default core;
 }

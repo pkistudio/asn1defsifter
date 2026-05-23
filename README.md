@@ -77,6 +77,7 @@ Run local checks with:
 npm run check
 npm test
 npm run build
+npm run smoke
 ```
 
 For package or release-related changes, also run:

@@ -28,6 +28,7 @@
     "build:lib": "vite build",
     "build:types": "tsc -p tsconfig.types.json",
     "check": "tsc --noEmit",
+    "smoke": "npm run build && node scripts/smoke.mjs",
     "test": "vitest run",
     "pack:dry-run": "npm pack --dry-run"
   },
