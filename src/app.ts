@@ -1,5 +1,5 @@
 import './styles.css';
-import { createPkiCandidateReport, type Candidate, type CandidateReport, type CandidateReportRoot, type CandidateReportSubtree } from './core/index.js';
+import { createPkiCandidateReport, type Candidate, type CandidateReport, type CandidateReportRoot, type CandidateReportSubtree, type TlvNode } from './core/index.js';
 
 type ViewerRoot = DocumentFragment | Element;
 
@@ -31,6 +31,8 @@ type LogEntry = {
 type CandidateSelection = {
   candidate: Candidate;
   context: string;
+  bytes?: Uint8Array;
+  byteNotice: string;
 };
 
 const MAX_LOG_ENTRIES = 200;
@@ -68,8 +70,16 @@ export function initAsn1DefinitionSifter(options: Asn1DefinitionSifterAppOptions
             </div>
             <input id="adsFileInput" class="ads-hidden-input" type="file" accept=".ber,.cer,.crt,.der,.hex,.pem,application/octet-stream,application/pkix-cert" />
           </nav>
-          <div id="adsHexView" class="ads-pane-content ads-hex-view" aria-label="Loaded DER bytes">No DER input loaded.</div>
-          <div id="adsInputNotice" class="ads-notice" role="status">Load a DER file or paste hexadecimal DER from the clipboard.</div>
+          <div class="ads-input-split">
+            <section class="ads-hex-section" aria-label="Loaded DER bytes">
+              <div id="adsHexView" class="ads-pane-content ads-hex-view">No DER input loaded.</div>
+              <div id="adsInputNotice" class="ads-notice" role="status">Load a DER file or paste hexadecimal DER from the clipboard.</div>
+            </section>
+            <section class="ads-hex-section" aria-label="Selected candidate bytes">
+              <div id="adsSelectedHexView" class="ads-pane-content ads-hex-view">No candidate selected.</div>
+              <div id="adsSelectedHexNotice" class="ads-notice" role="status">Select a candidate to inspect the matching DER bytes.</div>
+            </section>
+          </div>
         </section>
         <section class="ads-pane ads-candidate-pane" aria-label="Candidate results">
           <header class="ads-pane-menu">
@@ -107,7 +117,9 @@ export function initAsn1DefinitionSifter(options: Asn1DefinitionSifterAppOptions
   const clearButton = getElement<HTMLButtonElement>(app, '#adsClearButton');
   const clearLogButton = getElement<HTMLButtonElement>(app, '#adsClearLogButton');
   const hexView = getElement<HTMLElement>(app, '#adsHexView');
+  const selectedHexView = getElement<HTMLElement>(app, '#adsSelectedHexView');
   const inputNotice = getElement<HTMLElement>(app, '#adsInputNotice');
+  const selectedHexNotice = getElement<HTMLElement>(app, '#adsSelectedHexNotice');
   const candidateTree = getElement<HTMLElement>(app, '#adsCandidateTree');
   const selectedCandidateSummary = getElement<HTMLElement>(app, '#adsSelectedCandidateSummary');
   const candidateDetail = getElement<HTMLElement>(app, '#adsCandidateDetail');
@@ -137,13 +149,15 @@ export function initAsn1DefinitionSifter(options: Asn1DefinitionSifterAppOptions
     try {
       const report = await createPkiCandidateReport(bytes, {
         includeSubtrees: true,
+        includeNodes: true,
         maxSubtreeDepth: 4,
         maxSubtreeReports: 50,
         maxResults: 8
       });
       state.report = report;
-      renderCandidateTree(candidateTree, report, (selection, selectedElement) => {
+      renderCandidateTree(candidateTree, report, bytes, (selection, selectedElement) => {
         renderSelectedCandidate(candidateDetail, selectedCandidateSummary, selection);
+        renderSelectedHex(selectedHexView, selectedHexNotice, selection);
         markSelectedTreeItem(candidateTree, selectedElement);
       });
       const rootCount = report.roots.length;
@@ -155,6 +169,7 @@ export function initAsn1DefinitionSifter(options: Asn1DefinitionSifterAppOptions
       state.report = null;
       candidateTree.textContent = 'No candidate report available.';
       renderSelectedCandidate(candidateDetail, selectedCandidateSummary);
+      renderSelectedHex(selectedHexView, selectedHexNotice);
       const message = getErrorMessage(error);
       setCandidateNotice(message);
       addLog('error', 'createPkiCandidateReport failed', message);
@@ -171,8 +186,10 @@ export function initAsn1DefinitionSifter(options: Asn1DefinitionSifterAppOptions
     state.sourceName = null;
     state.bytes = null;
     hexView.textContent = 'No DER input loaded.';
+    selectedHexView.textContent = 'No candidate selected.';
     candidateTree.textContent = 'No candidate report yet.';
     renderSelectedCandidate(candidateDetail, selectedCandidateSummary);
+    renderSelectedHex(selectedHexView, selectedHexNotice);
     setInputNotice('Load a DER file or paste hexadecimal DER from the clipboard.');
     setCandidateNotice('Candidate results will appear after input is loaded.');
     addLog('info', 'clear', 'Cleared input and candidate report.');
@@ -252,7 +269,7 @@ if (typeof window !== 'undefined') {
   window.Asn1DefinitionSifter = { init: initAsn1DefinitionSifter };
 }
 
-function renderCandidateTree(container: HTMLElement, report: CandidateReport, selectCandidate: (selection: CandidateSelection, selectedElement: HTMLElement) => void): void {
+function renderCandidateTree(container: HTMLElement, report: CandidateReport, sourceBytes: Uint8Array, selectCandidate: (selection: CandidateSelection, selectedElement: HTMLElement) => void): void {
   container.innerHTML = '';
   if (report.roots.length === 0) {
     container.textContent = 'No root TLV nodes were parsed.';
@@ -262,8 +279,8 @@ function renderCandidateTree(container: HTMLElement, report: CandidateReport, se
   for (const root of report.roots) {
     const subtrees = sortSubtreesByBestScore(root.subtrees ?? []);
     for (const candidate of sortCandidatesByScore(root.candidates)) {
-      const candidateNode = createRootCandidateNode(candidate, root, subtrees, selectCandidate);
-      firstSelection ??= { selection: { candidate, context: `Root ${root.index}` }, selectedElement: getTreeSummary(candidateNode) };
+      const candidateNode = createRootCandidateNode(candidate, root, sourceBytes, subtrees, selectCandidate);
+      firstSelection ??= { selection: createRootSelection(candidate, root, sourceBytes), selectedElement: getTreeSummary(candidateNode) };
       container.append(candidateNode);
     }
     if (root.candidates.length === 0) container.append(createEmptyRootNode(root, subtrees, selectCandidate));
@@ -271,11 +288,11 @@ function renderCandidateTree(container: HTMLElement, report: CandidateReport, se
   if (firstSelection) selectCandidate(firstSelection.selection, firstSelection.selectedElement);
 }
 
-function createRootCandidateNode(candidate: Candidate, root: CandidateReportRoot, subtrees: CandidateReportSubtree[], selectCandidate: (selection: CandidateSelection, selectedElement: HTMLElement) => void): HTMLElement {
+function createRootCandidateNode(candidate: Candidate, root: CandidateReportRoot, sourceBytes: Uint8Array, subtrees: CandidateReportSubtree[], selectCandidate: (selection: CandidateSelection, selectedElement: HTMLElement) => void): HTMLElement {
   const details = document.createElement('details');
   details.className = 'ads-tree-node ads-candidate-node';
   const summary = createSummary(formatCandidateName(candidate), `Root ${root.index} · ${formatScore(candidate.score)} · ${candidate.confidence}`);
-  summary.addEventListener('click', () => selectCandidate({ candidate, context: `Root ${root.index}` }, summary));
+  summary.addEventListener('click', () => selectCandidate(createRootSelection(candidate, root, sourceBytes), summary));
   details.append(summary);
   if (subtrees.length > 0) {
     const list = document.createElement('div');
@@ -307,18 +324,36 @@ function createSubtreeNode(subtree: CandidateReportSubtree, selectCandidate: (se
   details.append(createSummary(`Subtree ${subtree.path}`, best ? `${formatCandidateName(best)} · ${formatScore(best.score)} · ${best.confidence}` : `${subtree.summary.candidateCount} candidate(s)`));
   const list = document.createElement('div');
   list.className = 'ads-tree-children';
-  for (const candidate of sortCandidatesByScore(subtree.candidates)) list.append(createCandidateNode(candidate, `Subtree ${subtree.path}`, selectCandidate));
+  for (const candidate of sortCandidatesByScore(subtree.candidates)) list.append(createCandidateNode(candidate, subtree, selectCandidate));
   details.append(list);
   return details;
 }
 
-function createCandidateNode(candidate: Candidate, context: string, selectCandidate: (selection: CandidateSelection, selectedElement: HTMLElement) => void): HTMLElement {
+function createCandidateNode(candidate: Candidate, subtree: CandidateReportSubtree, selectCandidate: (selection: CandidateSelection, selectedElement: HTMLElement) => void): HTMLElement {
   const item = document.createElement('button');
   item.className = 'ads-tree-item ads-candidate-item';
   item.type = 'button';
   item.append(createTreeLabel(formatCandidateName(candidate)), createTreeNote(`${formatScore(candidate.score)} · ${candidate.confidence}`));
-  item.addEventListener('click', () => selectCandidate({ candidate, context }, item));
+  item.addEventListener('click', () => selectCandidate(createSubtreeSelection(candidate, subtree), item));
   return item;
+}
+
+function createRootSelection(candidate: Candidate, root: CandidateReportRoot, sourceBytes: Uint8Array): CandidateSelection {
+  return {
+    candidate,
+    context: `Root ${root.index}`,
+    bytes: root.index === 0 ? sourceBytes : getNodeBytes(root.node),
+    byteNotice: `Root ${root.index} bytes for ${formatCandidateName(candidate)}.`
+  };
+}
+
+function createSubtreeSelection(candidate: Candidate, subtree: CandidateReportSubtree): CandidateSelection {
+  return {
+    candidate,
+    context: `Subtree ${subtree.path}`,
+    bytes: getNodeBytes(subtree.node),
+    byteNotice: `Subtree ${subtree.path} bytes for ${formatCandidateName(candidate)}.`
+  };
 }
 
 function renderSelectedCandidate(container: HTMLElement, summary: HTMLElement, selection?: CandidateSelection): void {
@@ -334,6 +369,21 @@ function renderSelectedCandidate(container: HTMLElement, summary: HTMLElement, s
   container.append(createKeyValue('Diagnostics', candidate.diagnostics.slice(0, 8).map((diagnostic) => `${diagnostic.severity}: ${diagnostic.message}`).join('\n') || 'No diagnostics.'));
   container.append(createKeyValue('Ambiguities', candidate.ambiguities.slice(0, 8).join('\n') || 'No ambiguities.'));
   container.append(createKeyValue('Matched paths', candidate.matchedPaths.slice(0, 12).map((path) => `${path.nodePath} -> ${path.schemaPath}`).join('\n') || 'No matched paths.'));
+}
+
+function renderSelectedHex(container: HTMLElement, notice: HTMLElement, selection?: CandidateSelection): void {
+  if (!selection) {
+    container.textContent = 'No candidate selected.';
+    notice.textContent = 'Select a candidate to inspect the matching DER bytes.';
+    return;
+  }
+  if (!selection.bytes || selection.bytes.length === 0) {
+    container.textContent = 'No encoded bytes available for the selected candidate.';
+    notice.textContent = `${selection.context}: encoded bytes are not available from the parser output.`;
+    return;
+  }
+  container.textContent = formatHexDump(selection.bytes);
+  notice.textContent = `${selection.byteNotice} ${selection.bytes.byteLength} byte(s).`;
 }
 
 function createSummary(label: string, note: string): HTMLElement {
@@ -409,6 +459,56 @@ function formatHexDump(bytes: Uint8Array): string {
     rows.push(`${address}  ${hex}  ${ascii}`);
   }
   return rows.join('\n');
+}
+
+function getNodeBytes(node: TlvNode | undefined): Uint8Array | undefined {
+  if (!node) return undefined;
+  return encodeTlvNode(node) ?? node.encodedBytes ?? node.valueBytes;
+}
+
+function encodeTlvNode(node: TlvNode): Uint8Array | undefined {
+  if (node.tagNumber >= 31) return node.encodedBytes;
+  const valueBytes = getNodeValueBytes(node);
+  if (!valueBytes) return node.encodedBytes;
+  const tagByte = tagClassBits(node.tagClass) | (node.constructed ? 0x20 : 0) | node.tagNumber;
+  return concatBytes(new Uint8Array([tagByte]), encodeLength(valueBytes.byteLength), valueBytes);
+}
+
+function getNodeValueBytes(node: TlvNode): Uint8Array | undefined {
+  if (node.children && node.children.length > 0) {
+    const childBytes = node.children.map(encodeTlvNode);
+    if (childBytes.some((bytes) => !bytes)) return node.valueBytes ?? node.encodedBytes;
+    return concatBytes(...childBytes as Uint8Array[]);
+  }
+  return node.valueBytes;
+}
+
+function tagClassBits(tagClass: TlvNode['tagClass']): number {
+  if (tagClass === 'application') return 0x40;
+  if (tagClass === 'context') return 0x80;
+  if (tagClass === 'private') return 0xc0;
+  return 0;
+}
+
+function encodeLength(length: number): Uint8Array {
+  if (length < 0x80) return new Uint8Array([length]);
+  const bytes: number[] = [];
+  let remaining = length;
+  while (remaining > 0) {
+    bytes.unshift(remaining & 0xff);
+    remaining >>= 8;
+  }
+  return new Uint8Array([0x80 | bytes.length, ...bytes]);
+}
+
+function concatBytes(...parts: Uint8Array[]): Uint8Array {
+  const bytes = new Uint8Array(parts.reduce((sum, part) => sum + part.byteLength, 0));
+  let offset = 0;
+  for (const part of parts) {
+    bytes.set(part, offset);
+    offset += part.byteLength;
+  }
+  return bytes;
 }
 
 function hexToBytes(text: string): Uint8Array {

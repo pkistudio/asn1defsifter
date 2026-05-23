@@ -59,6 +59,23 @@ button:hover {
   border-right: 1px solid #c9d2dc;
 }
 
+.ads-input-split {
+  display: grid;
+  grid-template-rows: minmax(180px, 52%) minmax(160px, 1fr);
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+.ads-hex-section {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.ads-hex-section + .ads-hex-section {
+  border-top: 1px solid #c9d2dc;
+}
+
 .ads-pane-menu,
 .ads-log-menu {
   display: flex;
