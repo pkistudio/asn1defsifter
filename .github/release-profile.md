@@ -41,6 +41,8 @@
 - Pages workflow: `.github/workflows/pages.yml`
 - Pages URL: `https://pkistudio.github.io/asn1defsifter/`
 - Pages artifact path: `pages-dist`
+- Wiki path in Codespaces: `/workspaces/asn1defsifter.wiki`
+- Keep Wiki work separate from main repository work unless explicitly requested.
 
 ## Special Hooks
 
