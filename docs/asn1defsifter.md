@@ -397,6 +397,15 @@ The viewer should consume public APIs from this package instead of reaching into
 
 The app can live inside the same repository for module verification, but it should not make the core resolver depend on UI frameworks, DOM APIs, VS Code APIs, or host-specific file systems.
 
+The package boundary should follow the broader PkiStudio family pattern used by packages such as pvkgadgets and certgadgets:
+
+- `@pkistudio/asn1defsifter` and `@pkistudio/asn1defsifter/core` expose the browser-first resolver API and types.
+- Additional focused APIs can be exported from dedicated subpaths when they are reusable outside the app, for example profile or report helpers.
+- `@pkistudio/asn1defsifter/app` exposes the standalone viewer initializer and app instance types.
+- `@pkistudio/asn1defsifter/styles.css` exposes app styles for hosts that embed the viewer.
+
+The app entry should import styles and DOM-specific code. The core entry should not import app code, CSS, browser file pickers, clipboard APIs, or host integration code.
+
 ## Initial Scope
 
 The first version should use a focused schema corpus instead of trying to cover every ASN.1 definition.
@@ -567,9 +576,12 @@ src/
   report/
     annotated-tree.ts
     agent-report.ts
+  app.ts
+  main.ts
+  styles.css
 ```
 
-The core should remain reusable and deterministic. Profile packages or corpus modules can grow over time.
+The core should remain reusable and deterministic. Profile packages or corpus modules can grow over time. The standalone app should be exported through a separate app entry point, mirroring the Core API versus app split used by other PkiStudio family packages.
 
 ## Final Positioning
 
