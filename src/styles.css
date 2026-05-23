@@ -202,6 +202,29 @@ button:hover {
   text-align: left;
 }
 
+.ads-tree-alternatives {
+  margin: 6px 0 6px 14px;
+  padding-left: 10px;
+  border-left: 1px dotted #b7c2ce;
+}
+
+.ads-tree-alternatives[hidden] {
+  display: none;
+}
+
+.ads-tree-alternatives .ads-tree-item {
+  grid-template-columns: 14px 12px 18px minmax(0, 1fr) auto;
+}
+
+.ads-tree-checkmark {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  color: #1f6f43;
+  font-weight: 700;
+}
+
 .ads-disclosure {
   display: inline-flex;
   align-items: center;

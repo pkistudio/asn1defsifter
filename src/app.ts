@@ -37,6 +37,11 @@ type CandidateSelection = {
 
 type TreeIconKind = 'branch' | 'leaf';
 
+type SubtreeDisplayNode = {
+  subtree: CandidateReportSubtree;
+  children: SubtreeDisplayNode[];
+};
+
 const MAX_LOG_ENTRIES = 200;
 const DEFAULT_HEX_SOURCE = 'clipboard.hex';
 
@@ -50,11 +55,12 @@ declare global {
 
 export function initAsn1DefinitionSifter(options: Asn1DefinitionSifterAppOptions = {}): Asn1DefinitionSifterAppInstance {
   const app = resolveMount(options.mount ?? '#app');
-  const state: { report: CandidateReport | null; sourceName: string | null; bytes: Uint8Array | null; logs: LogEntry[] } = {
+  const state: { report: CandidateReport | null; sourceName: string | null; bytes: Uint8Array | null; logs: LogEntry[]; selectedSubtreeCandidates: Map<string, string> } = {
     report: null,
     sourceName: null,
     bytes: null,
-    logs: []
+    logs: [],
+    selectedSubtreeCandidates: new Map()
   };
 
   app.innerHTML = `
@@ -157,7 +163,8 @@ export function initAsn1DefinitionSifter(options: Asn1DefinitionSifterAppOptions
         maxResults: 8
       });
       state.report = report;
-      renderCandidateTree(candidateTree, report, bytes, (selection, selectedElement) => {
+      state.selectedSubtreeCandidates = new Map();
+      renderCandidateTree(candidateTree, report, bytes, state.selectedSubtreeCandidates, (selection, selectedElement) => {
         renderSelectedCandidate(candidateDetail, selectedCandidateSummary, selection);
         renderSelectedHex(selectedHexView, selectedHexNotice, selection);
         markSelectedTreeItem(candidateTree, selectedElement);
@@ -187,6 +194,7 @@ export function initAsn1DefinitionSifter(options: Asn1DefinitionSifterAppOptions
     state.report = null;
     state.sourceName = null;
     state.bytes = null;
+    state.selectedSubtreeCandidates = new Map();
     hexView.textContent = 'No DER input loaded.';
     selectedHexView.textContent = 'No candidate selected.';
     candidateTree.textContent = 'No candidate report yet.';
@@ -271,7 +279,7 @@ if (typeof window !== 'undefined') {
   window.Asn1DefinitionSifter = { init: initAsn1DefinitionSifter };
 }
 
-function renderCandidateTree(container: HTMLElement, report: CandidateReport, sourceBytes: Uint8Array, selectCandidate: (selection: CandidateSelection, selectedElement: HTMLElement) => void): void {
+function renderCandidateTree(container: HTMLElement, report: CandidateReport, sourceBytes: Uint8Array, selectedSubtreeCandidates: Map<string, string>, selectCandidate: (selection: CandidateSelection, selectedElement: HTMLElement) => void): void {
   container.innerHTML = '';
   if (report.roots.length === 0) {
     container.textContent = 'No root TLV nodes were parsed.';
@@ -279,35 +287,35 @@ function renderCandidateTree(container: HTMLElement, report: CandidateReport, so
   }
   let firstSelection: { selection: CandidateSelection; selectedElement: HTMLElement } | undefined;
   for (const root of report.roots) {
-    const subtrees = sortSubtreesByBestScore(root.subtrees ?? []);
+    const subtrees = buildSubtreeTree(root.subtrees ?? []);
     for (const candidate of sortCandidatesByScore(root.candidates)) {
-      const candidateNode = createRootCandidateNode(candidate, root, sourceBytes, subtrees, selectCandidate);
+      const candidateNode = createRootCandidateNode(candidate, root, sourceBytes, subtrees, selectedSubtreeCandidates, selectCandidate);
       firstSelection ??= { selection: createRootSelection(candidate, root, sourceBytes), selectedElement: getTreeSummary(candidateNode) };
       container.append(candidateNode);
     }
-    if (root.candidates.length === 0) container.append(createEmptyRootNode(root, subtrees, selectCandidate));
+    if (root.candidates.length === 0) container.append(createEmptyRootNode(root, subtrees, selectedSubtreeCandidates, selectCandidate));
   }
   if (firstSelection) selectCandidate(firstSelection.selection, firstSelection.selectedElement);
 }
 
-function createRootCandidateNode(candidate: Candidate, root: CandidateReportRoot, sourceBytes: Uint8Array, subtrees: CandidateReportSubtree[], selectCandidate: (selection: CandidateSelection, selectedElement: HTMLElement) => void): HTMLElement {
+function createRootCandidateNode(candidate: Candidate, root: CandidateReportRoot, sourceBytes: Uint8Array, subtrees: SubtreeDisplayNode[], selectedSubtreeCandidates: Map<string, string>, selectCandidate: (selection: CandidateSelection, selectedElement: HTMLElement) => void): HTMLElement {
   const details = document.createElement('details');
   details.className = 'ads-tree-node ads-candidate-node';
   const summary = createSummary(formatCandidateName(candidate), `Root ${root.index} · ${formatScore(candidate.score)} · ${candidate.confidence}`, {
     hasChildren: subtrees.length > 0
   });
-  summary.addEventListener('click', () => selectCandidate(createRootSelection(candidate, root, sourceBytes), summary));
+  bindSummarySelection(summary, () => selectCandidate(createRootSelection(candidate, root, sourceBytes), summary));
   details.append(summary);
   if (subtrees.length > 0) {
     const list = document.createElement('div');
     list.className = 'ads-tree-children';
-    for (const subtree of subtrees) list.append(createSubtreeNode(subtree, selectCandidate));
+    for (const subtree of subtrees) list.append(createSubtreeNode(subtree, selectedSubtreeCandidates, selectCandidate));
     details.append(list);
   }
   return details;
 }
 
-function createEmptyRootNode(root: CandidateReportRoot, subtrees: CandidateReportSubtree[], selectCandidate: (selection: CandidateSelection, selectedElement: HTMLElement) => void): HTMLElement {
+function createEmptyRootNode(root: CandidateReportRoot, subtrees: SubtreeDisplayNode[], selectedSubtreeCandidates: Map<string, string>, selectCandidate: (selection: CandidateSelection, selectedElement: HTMLElement) => void): HTMLElement {
   const details = document.createElement('details');
   details.className = 'ads-tree-node';
   details.open = true;
@@ -315,33 +323,114 @@ function createEmptyRootNode(root: CandidateReportRoot, subtrees: CandidateRepor
   if (subtrees.length > 0) {
     const list = document.createElement('div');
     list.className = 'ads-tree-children';
-    for (const subtree of subtrees) list.append(createSubtreeNode(subtree, selectCandidate));
+    for (const subtree of subtrees) list.append(createSubtreeNode(subtree, selectedSubtreeCandidates, selectCandidate));
     details.append(list);
   }
   return details;
 }
 
-function createSubtreeNode(subtree: CandidateReportSubtree, selectCandidate: (selection: CandidateSelection, selectedElement: HTMLElement) => void): HTMLElement {
+function createSubtreeNode(node: SubtreeDisplayNode, selectedSubtreeCandidates: Map<string, string>, selectCandidate: (selection: CandidateSelection, selectedElement: HTMLElement) => void): HTMLElement {
+  const { subtree } = node;
+  const selectedCandidate = getSelectedSubtreeCandidate(subtree, selectedSubtreeCandidates);
   const details = document.createElement('details');
   details.className = 'ads-tree-node ads-subtree-node';
-  const best = subtree.summary.bestCandidate;
-  details.append(createSummary(`Subtree ${subtree.path}`, best ? `${formatCandidateName(best)} · ${formatScore(best.score)} · ${best.confidence}` : `${subtree.summary.candidateCount} candidate(s)`, {
-    hasChildren: subtree.candidates.length > 0
-  }));
+  const summary = createSummary(formatCandidateName(selectedCandidate), `${subtree.path} · ${formatScore(selectedCandidate.score)} · ${selectedCandidate.confidence}`, {
+    hasChildren: node.children.length > 0
+  });
+  bindSummarySelection(summary, () => selectCandidate(createSubtreeSelection(selectedCandidate, subtree), summary));
+  const icon = summary.querySelector<HTMLElement>('.ads-tree-icon');
+  icon?.addEventListener('click', (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    const shouldShow = alternatives.hidden;
+    details.open = true;
+    alternatives.hidden = !shouldShow;
+  });
+  details.append(summary);
+  const alternatives = createAlternativeList(subtree, selectedSubtreeCandidates, (candidate, selectedElement) => {
+    selectedSubtreeCandidates.set(subtree.path, candidateKey(candidate));
+    updateSummary(summary, formatCandidateName(candidate), `${subtree.path} · ${formatScore(candidate.score)} · ${candidate.confidence}`);
+    updateAlternativeChecks(alternatives, candidate);
+    selectCandidate(createSubtreeSelection(candidate, subtree), selectedElement);
+  });
+  details.append(alternatives);
   const list = document.createElement('div');
   list.className = 'ads-tree-children';
-  for (const candidate of sortCandidatesByScore(subtree.candidates)) list.append(createCandidateNode(candidate, subtree, selectCandidate));
+  for (const child of node.children) list.append(createSubtreeNode(child, selectedSubtreeCandidates, selectCandidate));
   details.append(list);
   return details;
 }
 
-function createCandidateNode(candidate: Candidate, subtree: CandidateReportSubtree, selectCandidate: (selection: CandidateSelection, selectedElement: HTMLElement) => void): HTMLElement {
+function createAlternativeList(subtree: CandidateReportSubtree, selectedSubtreeCandidates: Map<string, string>, selectAlternative: (candidate: Candidate, selectedElement: HTMLElement) => void): HTMLElement {
+  const list = document.createElement('div');
+  list.className = 'ads-tree-alternatives';
+  list.hidden = true;
+  for (const candidate of sortCandidatesByScore(subtree.candidates)) list.append(createCandidateNode(candidate, subtree, selectedSubtreeCandidates, selectAlternative));
+  return list;
+}
+
+function createCandidateNode(candidate: Candidate, subtree: CandidateReportSubtree, selectedSubtreeCandidates: Map<string, string>, selectAlternative: (candidate: Candidate, selectedElement: HTMLElement) => void): HTMLElement {
   const item = document.createElement('button');
   item.className = 'ads-tree-item ads-candidate-item';
   item.type = 'button';
+  item.dataset.candidateKey = candidateKey(candidate);
   item.append(createDisclosure(false), createTreeIcon('leaf'), createTreeLabel(formatCandidateName(candidate)), createTreeNote(`${formatScore(candidate.score)} · ${candidate.confidence}`));
-  item.addEventListener('click', () => selectCandidate(createSubtreeSelection(candidate, subtree), item));
+  item.prepend(createCheckmark(candidateKey(candidate) === candidateKey(getSelectedSubtreeCandidate(subtree, selectedSubtreeCandidates))));
+  item.addEventListener('click', () => selectAlternative(candidate, item));
   return item;
+}
+
+function buildSubtreeTree(subtrees: CandidateReportSubtree[]): SubtreeDisplayNode[] {
+  const nodes = new Map(subtrees.map((subtree) => [subtree.path, { subtree, children: [] as SubtreeDisplayNode[] }]));
+  const roots: SubtreeDisplayNode[] = [];
+  for (const node of [...nodes.values()].sort((left, right) => left.subtree.path.localeCompare(right.subtree.path))) {
+    const parent = nodes.get(parentPath(node.subtree.path));
+    if (parent) parent.children.push(node);
+    else roots.push(node);
+  }
+  for (const node of nodes.values()) node.children = sortSubtreeNodes(node.children);
+  return sortSubtreeNodes(roots);
+}
+
+function sortSubtreeNodes(nodes: SubtreeDisplayNode[]): SubtreeDisplayNode[] {
+  return [...nodes].sort((left, right) => getBestSubtreeScore(right.subtree) - getBestSubtreeScore(left.subtree) || left.subtree.path.localeCompare(right.subtree.path));
+}
+
+function parentPath(path: string): string {
+  const index = path.lastIndexOf('.');
+  return index > 0 ? path.slice(0, index) : '';
+}
+
+function getSelectedSubtreeCandidate(subtree: CandidateReportSubtree, selectedSubtreeCandidates: Map<string, string>): Candidate {
+  const selectedKey = selectedSubtreeCandidates.get(subtree.path);
+  return subtree.candidates.find((candidate) => candidateKey(candidate) === selectedKey) ?? sortCandidatesByScore(subtree.candidates)[0];
+}
+
+function candidateKey(candidate: Candidate): string {
+  return `${candidate.moduleName ?? ''}\u0000${candidate.typeName}`;
+}
+
+function createCheckmark(checked: boolean): HTMLElement {
+  const checkmark = document.createElement('span');
+  checkmark.className = 'ads-tree-checkmark';
+  checkmark.textContent = checked ? '✓' : '';
+  checkmark.setAttribute('aria-hidden', 'true');
+  return checkmark;
+}
+
+function updateSummary(summary: HTMLElement, label: string, note: string): void {
+  const labelElement = summary.querySelector<HTMLElement>('.ads-tree-label');
+  const noteElement = summary.querySelector<HTMLElement>('.ads-tree-note');
+  if (labelElement) labelElement.textContent = label;
+  if (noteElement) noteElement.textContent = note;
+}
+
+function updateAlternativeChecks(container: HTMLElement, selectedCandidate: Candidate): void {
+  const selectedKey = candidateKey(selectedCandidate);
+  for (const item of container.querySelectorAll<HTMLElement>('.ads-candidate-item')) {
+    const checkmark = item.querySelector<HTMLElement>('.ads-tree-checkmark');
+    if (checkmark) checkmark.textContent = item.dataset.candidateKey === selectedKey ? '✓' : '';
+  }
 }
 
 function createRootSelection(candidate: Candidate, root: CandidateReportRoot, sourceBytes: Uint8Array): CandidateSelection {
@@ -397,6 +486,14 @@ function createSummary(label: string, note: string, options: { hasChildren: bool
   if (!options.hasChildren) summary.classList.add('ads-tree-leaf');
   summary.append(createDisclosure(options.hasChildren), createTreeIcon(options.hasChildren ? 'branch' : 'leaf'), createTreeLabel(label), createTreeNote(note));
   return summary;
+}
+
+function bindSummarySelection(summary: HTMLElement, select: () => void): void {
+  summary.addEventListener('click', (event) => {
+    if ((event.target as HTMLElement).closest('.ads-disclosure')) return;
+    event.preventDefault();
+    select();
+  });
 }
 
 function createDisclosure(hasChildren: boolean): HTMLElement {
@@ -554,10 +651,6 @@ function formatScore(score: number): string {
 
 function sortCandidatesByScore(candidates: Candidate[]): Candidate[] {
   return [...candidates].sort((left, right) => right.score - left.score || formatCandidateName(left).localeCompare(formatCandidateName(right)));
-}
-
-function sortSubtreesByBestScore(subtrees: CandidateReportSubtree[]): CandidateReportSubtree[] {
-  return [...subtrees].sort((left, right) => getBestSubtreeScore(right) - getBestSubtreeScore(left) || left.path.localeCompare(right.path));
 }
 
 function getBestSubtreeScore(subtree: CandidateReportSubtree): number {
