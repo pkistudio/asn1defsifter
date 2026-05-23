@@ -35,7 +35,7 @@ type CandidateSelection = {
   byteNotice: string;
 };
 
-type TreeIconKind = 'root' | 'candidate' | 'subtree';
+type TreeIconKind = 'branch' | 'leaf';
 
 const MAX_LOG_ENTRIES = 200;
 const DEFAULT_HEX_SOURCE = 'clipboard.hex';
@@ -294,7 +294,6 @@ function createRootCandidateNode(candidate: Candidate, root: CandidateReportRoot
   const details = document.createElement('details');
   details.className = 'ads-tree-node ads-candidate-node';
   const summary = createSummary(formatCandidateName(candidate), `Root ${root.index} · ${formatScore(candidate.score)} · ${candidate.confidence}`, {
-    icon: 'candidate',
     hasChildren: subtrees.length > 0
   });
   summary.addEventListener('click', () => selectCandidate(createRootSelection(candidate, root, sourceBytes), summary));
@@ -312,7 +311,7 @@ function createEmptyRootNode(root: CandidateReportRoot, subtrees: CandidateRepor
   const details = document.createElement('details');
   details.className = 'ads-tree-node';
   details.open = true;
-  details.append(createSummary(`Root ${root.index}`, 'No candidates', { icon: 'root', hasChildren: subtrees.length > 0 }));
+  details.append(createSummary(`Root ${root.index}`, 'No candidates', { hasChildren: subtrees.length > 0 }));
   if (subtrees.length > 0) {
     const list = document.createElement('div');
     list.className = 'ads-tree-children';
@@ -327,7 +326,6 @@ function createSubtreeNode(subtree: CandidateReportSubtree, selectCandidate: (se
   details.className = 'ads-tree-node ads-subtree-node';
   const best = subtree.summary.bestCandidate;
   details.append(createSummary(`Subtree ${subtree.path}`, best ? `${formatCandidateName(best)} · ${formatScore(best.score)} · ${best.confidence}` : `${subtree.summary.candidateCount} candidate(s)`, {
-    icon: 'subtree',
     hasChildren: subtree.candidates.length > 0
   }));
   const list = document.createElement('div');
@@ -341,7 +339,7 @@ function createCandidateNode(candidate: Candidate, subtree: CandidateReportSubtr
   const item = document.createElement('button');
   item.className = 'ads-tree-item ads-candidate-item';
   item.type = 'button';
-  item.append(createDisclosure(false), createTreeIcon('candidate'), createTreeLabel(formatCandidateName(candidate)), createTreeNote(`${formatScore(candidate.score)} · ${candidate.confidence}`));
+  item.append(createDisclosure(false), createTreeIcon('leaf'), createTreeLabel(formatCandidateName(candidate)), createTreeNote(`${formatScore(candidate.score)} · ${candidate.confidence}`));
   item.addEventListener('click', () => selectCandidate(createSubtreeSelection(candidate, subtree), item));
   return item;
 }
@@ -394,10 +392,10 @@ function renderSelectedHex(container: HTMLElement, notice: HTMLElement, selectio
   notice.textContent = `${selection.byteNotice} ${selection.bytes.byteLength} byte(s).`;
 }
 
-function createSummary(label: string, note: string, options: { icon: TreeIconKind; hasChildren: boolean }): HTMLElement {
+function createSummary(label: string, note: string, options: { hasChildren: boolean }): HTMLElement {
   const summary = document.createElement('summary');
   if (!options.hasChildren) summary.classList.add('ads-tree-leaf');
-  summary.append(createDisclosure(options.hasChildren), createTreeIcon(options.icon), createTreeLabel(label), createTreeNote(note));
+  summary.append(createDisclosure(options.hasChildren), createTreeIcon(options.hasChildren ? 'branch' : 'leaf'), createTreeLabel(label), createTreeNote(note));
   return summary;
 }
 
@@ -413,7 +411,6 @@ function createTreeIcon(kind: TreeIconKind): HTMLElement {
   const icon = document.createElement('span');
   icon.className = `ads-tree-icon ads-tree-icon-${kind}`;
   icon.setAttribute('aria-hidden', 'true');
-  icon.textContent = kind === 'root' ? 'R' : kind === 'subtree' ? 'S' : 'C';
   return icon;
 }
 

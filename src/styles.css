@@ -170,8 +170,8 @@ button:hover {
 
 .ads-tree-node summary {
   display: grid;
-  grid-template-columns: 14px 18px minmax(0, 1fr) auto;
-  gap: 10px;
+  grid-template-columns: 12px 18px minmax(0, 1fr) auto;
+  gap: 5px;
   align-items: center;
   min-height: 32px;
   border: 1px solid #d4dde6;
@@ -189,8 +189,8 @@ button:hover {
 
 .ads-tree-item {
   display: grid;
-  grid-template-columns: 14px 18px minmax(0, 1fr) auto;
-  gap: 10px;
+  grid-template-columns: 12px 18px minmax(0, 1fr) auto;
+  gap: 5px;
   align-items: center;
   width: 100%;
   min-height: 32px;
@@ -206,49 +206,73 @@ button:hover {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 14px;
-  height: 14px;
+  width: 11px;
+  height: 11px;
+  border: 1px solid #7f8b97;
+  color: #1f2937;
+  background: #ffffff;
+  font-size: 10px;
+  line-height: 1;
 }
 
 .ads-disclosure::before {
-  width: 0;
-  height: 0;
-  border-top: 4px solid transparent;
-  border-bottom: 4px solid transparent;
-  border-left: 6px solid #56677a;
   content: "";
-  transition: transform 120ms ease;
+}
+
+details:not([open]) > summary > .ads-disclosure::before {
+  content: "+";
 }
 
 details[open] > summary > .ads-disclosure::before {
-  transform: rotate(90deg);
+  content: "-";
 }
 
 .ads-disclosure-hidden {
+  border-color: transparent;
+  background: transparent;
   visibility: hidden;
 }
 
 .ads-tree-icon {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 18px;
-  height: 18px;
-  border: 1px solid #b8c4d0;
-  border-radius: 4px;
-  color: #304056;
-  background: #edf3f8;
-  font-size: 10px;
-  font-weight: 700;
-  line-height: 1;
+  position: relative;
+  display: inline-block;
+  width: 16px;
+  height: 14px;
 }
 
-.ads-tree-icon-subtree {
-  background: #eef7f4;
+.ads-tree-icon-branch::before {
+  position: absolute;
+  top: 1px;
+  left: 1px;
+  width: 7px;
+  height: 4px;
+  border: 1px solid #c29018;
+  border-bottom: 0;
+  background: #ffd35a;
+  content: "";
 }
 
-.ads-tree-icon-root {
-  background: #f3f0fa;
+.ads-tree-icon-branch::after {
+  position: absolute;
+  top: 4px;
+  left: 0;
+  width: 15px;
+  height: 9px;
+  border: 1px solid #c29018;
+  background: #ffc83d;
+  content: "";
+}
+
+.ads-tree-icon-leaf::before {
+  position: absolute;
+  top: 1px;
+  left: 3px;
+  width: 10px;
+  height: 12px;
+  border: 1px solid #9ca7b3;
+  background: #ffffff;
+  box-shadow: inset -3px 3px 0 #eef2f6;
+  content: "";
 }
 
 .ads-tree-selected {
