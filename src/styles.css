@@ -170,7 +170,7 @@ button:hover {
 
 .ads-tree-node summary {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-columns: 14px 18px minmax(0, 1fr) auto;
   gap: 10px;
   align-items: center;
   min-height: 32px;
@@ -181,9 +181,15 @@ button:hover {
   cursor: pointer;
 }
 
+.ads-tree-node summary::marker,
+.ads-tree-node summary::-webkit-details-marker {
+  display: none;
+  content: "";
+}
+
 .ads-tree-item {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-columns: 14px 18px minmax(0, 1fr) auto;
   gap: 10px;
   align-items: center;
   width: 100%;
@@ -194,6 +200,55 @@ button:hover {
   padding: 5px 8px;
   background: #ffffff;
   text-align: left;
+}
+
+.ads-disclosure {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  height: 14px;
+}
+
+.ads-disclosure::before {
+  width: 0;
+  height: 0;
+  border-top: 4px solid transparent;
+  border-bottom: 4px solid transparent;
+  border-left: 6px solid #56677a;
+  content: "";
+  transition: transform 120ms ease;
+}
+
+details[open] > summary > .ads-disclosure::before {
+  transform: rotate(90deg);
+}
+
+.ads-disclosure-hidden {
+  visibility: hidden;
+}
+
+.ads-tree-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border: 1px solid #b8c4d0;
+  border-radius: 4px;
+  color: #304056;
+  background: #edf3f8;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.ads-tree-icon-subtree {
+  background: #eef7f4;
+}
+
+.ads-tree-icon-root {
+  background: #f3f0fa;
 }
 
 .ads-tree-selected {
