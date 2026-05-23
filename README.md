@@ -13,7 +13,7 @@ Current version: 0.1.0
 - ASN.1 Schema Model matching through `@pkistudio/asn1instancebuilder` definitions.
 - Candidate ranking with numeric scores, confidence labels, evidence, diagnostics, ambiguity notes, and matched node/schema paths.
 - PkiStudioJS adapter for parsing supported ASN.1 inputs into resolver-ready TLV nodes.
-- Built-in PKI component corpus for common fragments such as `AlgorithmIdentifier`, `SubjectPublicKeyInfo`, `RSAPublicKey`, `Certificate`, `CertificationRequest`, `PrivateKeyInfo`, and `ContentInfo`.
+- Built-in PKI component corpus for common fragments such as `AlgorithmIdentifier`, `SubjectPublicKeyInfo`, `RSAPublicKey`, EC named-curve parameters, `Certificate`, `CertificationRequest`, `PrivateKeyInfo`, and `ContentInfo`.
 - Document hypothesis helper with annotated tree output.
 
 ## Install
@@ -101,7 +101,7 @@ Pass `includeSubtrees: true` to add bounded candidate reports for child TLV node
 
 ## Standalone Viewer
 
-The package includes a small browser viewer for exercising the resolver without embedding it into another PkiStudio surface. It provides a left pane split between full DER hex input and selected candidate bytes, a right pane split between a score-sorted candidate tree and selected candidate details, and a bottom API log pane.
+The package includes a small browser viewer for exercising the resolver without embedding it into another PkiStudio surface. It provides a left pane split between full DER hex input and selected candidate bytes, a right pane split between a score-sorted candidate tree and selected candidate details, and a bottom API log pane. Terminal BIT STRING or OCTET STRING values with no ASN.1 candidates are shown as HEX-only tree items so raw key material, such as EC public points, remains inspectable without being mislabeled as another ASN.1 type.
 
 ```ts
 import { initAsn1DefinitionSifter } from '@pkistudio/asn1defsifter/app';

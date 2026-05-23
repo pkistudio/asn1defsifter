@@ -27,6 +27,18 @@ describe('createPkiComponentCorpus', () => {
     });
   });
 
+  it('matches EC SubjectPublicKeyInfo with named curve AlgorithmIdentifier parameters', () => {
+    const node = sequence([sequence([oid('1.2.840.10045.2.1'), oid('1.2.840.10045.3.1.7')]), bitString()]);
+    const candidates = findAsn1Candidates(node, { schemaCorpus: createPkiComponentCorpus(), maxResults: 5 });
+
+    expect(candidates[0]).toMatchObject({
+      typeName: 'SubjectPublicKeyInfo',
+      moduleName: 'PkiComponents',
+      confidence: 'high'
+    });
+    expect(candidates[0].score).toBe(1);
+  });
+
   it('matches RSAPublicKey from the built-in corpus', () => {
     const node = sequence([integer(), integer()]);
     const candidates = findAsn1Candidates(node, { schemaCorpus: createPkiComponentCorpus(), maxResults: 5 });

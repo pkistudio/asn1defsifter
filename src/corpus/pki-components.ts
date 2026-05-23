@@ -6,7 +6,7 @@ Version ::= INTEGER { v1(0), v2(1), v3(2) }
 CertificateSerialNumber ::= INTEGER
 AlgorithmIdentifier ::= SEQUENCE {
   algorithm OBJECT IDENTIFIER,
-  parameters NULL OPTIONAL
+  parameters CHOICE { null NULL, namedCurve OBJECT IDENTIFIER } OPTIONAL
 }
 AttributeTypeAndValue ::= SEQUENCE {
   type OBJECT IDENTIFIER,

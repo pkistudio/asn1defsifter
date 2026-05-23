@@ -29,10 +29,12 @@ type LogEntry = {
 };
 
 type CandidateSelection = {
-  candidate: Candidate;
+  candidate?: Candidate;
   context: string;
   bytes?: Uint8Array;
   byteNotice: string;
+  hexOnly?: boolean;
+  hexSummary?: string;
 };
 
 type TreeIconKind = 'branch' | 'leaf';
@@ -157,6 +159,7 @@ export function initAsn1DefinitionSifter(options: Asn1DefinitionSifterAppOptions
     try {
       const report = await createPkiCandidateReport(bytes, {
         includeSubtrees: true,
+        includeEmptySubtrees: true,
         includeNodes: true,
         maxSubtreeDepth: 4,
         maxSubtreeReports: 50,
@@ -335,26 +338,32 @@ function createSubtreeNode(node: SubtreeDisplayNode, selectedSubtreeCandidates: 
   const selectedCandidate = getSelectedSubtreeCandidate(subtree, selectedSubtreeCandidates);
   const details = document.createElement('details');
   details.className = 'ads-tree-node ads-subtree-node';
-  const summary = createSummary(formatCandidateName(selectedCandidate), `${subtree.path} · ${formatScore(selectedCandidate.score)} · ${selectedCandidate.confidence}`, {
+  const summary = selectedCandidate ? createSummary(formatCandidateName(selectedCandidate), `${subtree.path} · ${formatScore(selectedCandidate.score)} · ${selectedCandidate.confidence}`, {
+    hasChildren: node.children.length > 0
+  }) : createSummary(formatHexOnlyLabel(subtree), `${subtree.path} · ${subtree.features.tagName} · ${formatByteCount(getBinaryPayloadBytes(subtree.node)?.byteLength ?? 0)}`, {
     hasChildren: node.children.length > 0
   });
-  bindSummarySelection(summary, () => selectCandidate(createSubtreeSelection(selectedCandidate, subtree), summary));
-  const icon = summary.querySelector<HTMLElement>('.ads-tree-icon');
-  const alternatives = createAlternativeList(subtree, selectedSubtreeCandidates, (candidate, selectedElement) => {
-    selectedSubtreeCandidates.set(subtree.path, candidateKey(candidate));
-    updateSummary(summary, formatCandidateName(candidate), `${subtree.path} · ${formatScore(candidate.score)} · ${candidate.confidence}`);
-    updateAlternativeChecks(alternatives, candidate);
-    alternatives.hidden = true;
-    selectCandidate(createSubtreeSelection(candidate, subtree), selectedElement);
-  });
-  icon?.addEventListener('click', (event) => {
-    event.preventDefault();
-    event.stopPropagation();
-    closeAlternativeMenus(alternatives);
-    const shouldShow = alternatives.hidden;
-    alternatives.hidden = !shouldShow;
-  });
-  summary.append(alternatives);
+  if (selectedCandidate) {
+    bindSummarySelection(summary, () => selectCandidate(createSubtreeSelection(selectedCandidate, subtree), summary));
+    const icon = summary.querySelector<HTMLElement>('.ads-tree-icon');
+    const alternatives = createAlternativeList(subtree, selectedSubtreeCandidates, (candidate, selectedElement) => {
+      selectedSubtreeCandidates.set(subtree.path, candidateKey(candidate));
+      updateSummary(summary, formatCandidateName(candidate), `${subtree.path} · ${formatScore(candidate.score)} · ${candidate.confidence}`);
+      updateAlternativeChecks(alternatives, candidate);
+      alternatives.hidden = true;
+      selectCandidate(createSubtreeSelection(candidate, subtree), selectedElement);
+    });
+    icon?.addEventListener('click', (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      closeAlternativeMenus(alternatives);
+      const shouldShow = alternatives.hidden;
+      alternatives.hidden = !shouldShow;
+    });
+    summary.append(alternatives);
+  } else {
+    bindSummarySelection(summary, () => selectCandidate(createHexOnlySelection(subtree), summary));
+  }
   details.append(summary);
   const list = document.createElement('div');
   list.className = 'ads-tree-children';
@@ -378,9 +387,10 @@ function createCandidateNode(candidate: Candidate, subtree: CandidateReportSubtr
   item.type = 'button';
   item.setAttribute('role', 'menuitemradio');
   item.dataset.candidateKey = candidateKey(candidate);
-  item.setAttribute('aria-checked', candidateKey(candidate) === candidateKey(getSelectedSubtreeCandidate(subtree, selectedSubtreeCandidates)) ? 'true' : 'false');
+  const selectedCandidate = getSelectedSubtreeCandidate(subtree, selectedSubtreeCandidates);
+  item.setAttribute('aria-checked', selectedCandidate && candidateKey(candidate) === candidateKey(selectedCandidate) ? 'true' : 'false');
   item.append(createTreeLabel(formatCandidateName(candidate)), createTreeNote(formatScore(candidate.score)));
-  item.prepend(createCheckmark(candidateKey(candidate) === candidateKey(getSelectedSubtreeCandidate(subtree, selectedSubtreeCandidates))));
+  item.prepend(createCheckmark(Boolean(selectedCandidate && candidateKey(candidate) === candidateKey(selectedCandidate))));
   item.addEventListener('click', (event) => {
     event.preventDefault();
     event.stopPropagation();
@@ -404,7 +414,26 @@ function buildSubtreeTree(subtrees: CandidateReportSubtree[]): SubtreeDisplayNod
     else roots.push(node);
   }
   for (const node of nodes.values()) node.children = sortSubtreeNodes(node.children);
-  return sortSubtreeNodes(roots);
+  return sortSubtreeNodes(roots.flatMap(pruneDisplayNode));
+}
+
+function pruneDisplayNode(node: SubtreeDisplayNode): SubtreeDisplayNode[] {
+  const children = sortSubtreeNodes(node.children.flatMap(pruneDisplayNode));
+  const displayNode = { ...node, children };
+  if (hasCandidateSubtree(node.subtree) || isHexOnlySubtree(node.subtree, children)) return [displayNode];
+  return children;
+}
+
+function hasCandidateSubtree(subtree: CandidateReportSubtree): boolean {
+  return subtree.candidates.length > 0;
+}
+
+function isHexOnlySubtree(subtree: CandidateReportSubtree, visibleChildren: SubtreeDisplayNode[]): boolean {
+  return subtree.candidates.length === 0 && visibleChildren.length === 0 && isBinaryPrimitive(subtree.node);
+}
+
+function isBinaryPrimitive(node: TlvNode | undefined): boolean {
+  return Boolean(node && !node.constructed && node.tagClass === 'universal' && (node.tagNumber === 3 || node.tagNumber === 4));
 }
 
 function sortSubtreeNodes(nodes: SubtreeDisplayNode[]): SubtreeDisplayNode[] {
@@ -416,7 +445,7 @@ function parentPath(path: string): string {
   return index > 0 ? path.slice(0, index) : '';
 }
 
-function getSelectedSubtreeCandidate(subtree: CandidateReportSubtree, selectedSubtreeCandidates: Map<string, string>): Candidate {
+function getSelectedSubtreeCandidate(subtree: CandidateReportSubtree, selectedSubtreeCandidates: Map<string, string>): Candidate | undefined {
   const selectedKey = selectedSubtreeCandidates.get(subtree.path);
   return subtree.candidates.find((candidate) => candidateKey(candidate) === selectedKey) ?? sortCandidatesByScore(subtree.candidates)[0];
 }
@@ -467,6 +496,17 @@ function createSubtreeSelection(candidate: Candidate, subtree: CandidateReportSu
   };
 }
 
+function createHexOnlySelection(subtree: CandidateReportSubtree): CandidateSelection {
+  const bytes = getBinaryPayloadBytes(subtree.node) ?? getNodeBytes(subtree.node);
+  return {
+    context: `Subtree ${subtree.path}`,
+    bytes,
+    byteNotice: `Raw ${subtree.features.tagName} bytes for ${subtree.path}.`,
+    hexOnly: true,
+    hexSummary: formatHexOnlyLabel(subtree)
+  };
+}
+
 function renderSelectedCandidate(container: HTMLElement, summary: HTMLElement, selection?: CandidateSelection): void {
   container.innerHTML = '';
   if (!selection) {
@@ -475,6 +515,11 @@ function renderSelectedCandidate(container: HTMLElement, summary: HTMLElement, s
     return;
   }
   const { candidate, context } = selection;
+  if (!candidate) {
+    summary.textContent = `${context} · ${selection.hexSummary ?? 'HEX data'}`;
+    container.append(createKeyValue('Binary data', 'No ASN.1 type candidate matched this value. The item is shown as raw hexadecimal bytes.'));
+    return;
+  }
   summary.textContent = `${context} · ${formatCandidateName(candidate)} · ${formatScore(candidate.score)} · ${candidate.confidence}`;
   container.append(createKeyValue('Evidence', candidate.evidence.slice(0, 8).join('\n') || 'No evidence.'));
   container.append(createKeyValue('Diagnostics', candidate.diagnostics.slice(0, 8).map((diagnostic) => `${diagnostic.severity}: ${diagnostic.message}`).join('\n') || 'No diagnostics.'));
@@ -594,6 +639,26 @@ function formatHexDump(bytes: Uint8Array): string {
     rows.push(`${address}  ${hex}  ${ascii}`);
   }
   return rows.join('\n');
+}
+
+function formatHexOnlyLabel(subtree: CandidateReportSubtree): string {
+  const bytes = getBinaryPayloadBytes(subtree.node) ?? new Uint8Array();
+  return `HEX ${formatHexPreview(bytes)}`;
+}
+
+function formatHexPreview(bytes: Uint8Array): string {
+  const preview = Array.from(bytes.slice(0, 12), (byte) => byte.toString(16).padStart(2, '0')).join(' ').toUpperCase();
+  return bytes.byteLength > 12 ? `${preview} ...` : preview || '(empty)';
+}
+
+function formatByteCount(length: number): string {
+  return `${length} byte${length === 1 ? '' : 's'}`;
+}
+
+function getBinaryPayloadBytes(node: TlvNode | undefined): Uint8Array | undefined {
+  if (!node?.valueBytes) return undefined;
+  if (node.tagClass === 'universal' && node.tagNumber === 3) return node.valueBytes.slice(1);
+  return node.valueBytes;
 }
 
 function getNodeBytes(node: TlvNode | undefined): Uint8Array | undefined {
