@@ -33,6 +33,7 @@
 - npm publish command in workflow: `npm publish --provenance --access public`
 - npm publication requires explicit user approval.
 - GitHub Release requires explicit user approval.
+- GitHub Release title pattern: `<tag>` only, such as `v0.1.2`.
 - Stable published tags should have a GitHub Release marked as latest unless the user instructs otherwise.
 - WordPress post workflow: `.github/workflows/publish-release-to-wordpress.yml`
 - WordPress post title pattern: `ASN.1 Definition Sifter <tag> をリリースしました`
