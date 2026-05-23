@@ -1,5 +1,8 @@
+import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { defineConfig } from 'vite';
+
+const packageJson = JSON.parse(readFileSync(resolve(__dirname, 'package.json'), 'utf8')) as { version: string };
 
 export default defineConfig({
   base: './',
@@ -17,5 +20,8 @@ export default defineConfig({
         assetFileNames: (assetInfo) => assetInfo.names?.some((name) => name.endsWith('.css')) ? 'styles.css' : 'assets/[name][extname]'
       }
     }
+  },
+  define: {
+    __ASN1_DEFINITION_SIFTER_VERSION__: JSON.stringify(packageJson.version)
   }
 });

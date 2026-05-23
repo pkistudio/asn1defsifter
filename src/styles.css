@@ -22,6 +22,7 @@
   --ads-selection-border: #5d91cc;
   --ads-splitter: #8f9baa;
   --ads-shadow-dialog: 0 18px 50px rgb(15 23 42 / 28%);
+  --ads-dialog-panel: #ffffff;
   --ads-api-log-row-border: #edf0f4;
   --ads-api-log-operation: #1f4f86;
   color: var(--ads-text);
@@ -54,6 +55,7 @@
     --ads-selection: rgb(47 88 126 / 62%);
     --ads-selection-border: #6ea5da;
     --ads-splitter: #6b7786;
+    --ads-dialog-panel: #252b34;
     --ads-api-log-row-border: rgb(119 132 150 / 26%);
     --ads-api-log-operation: #9ec9ff;
   }
@@ -86,6 +88,7 @@
   --ads-selection: rgb(47 88 126 / 62%);
   --ads-selection-border: #6ea5da;
   --ads-splitter: #6b7786;
+  --ads-dialog-panel: #252b34;
   --ads-api-log-row-border: rgb(119 132 150 / 26%);
   --ads-api-log-operation: #9ec9ff;
 }
@@ -686,12 +689,10 @@ details[open] > summary > .ads-disclosure::before {
 .ads-about-dialog {
   width: min(380px, calc(100% - 32px));
   margin: auto;
-  border: 1px solid var(--ads-panel-border);
-  border-radius: 4px;
+  border: 0;
   padding: 0;
   color: var(--ads-text);
-  background: var(--ads-panel);
-  box-shadow: var(--ads-shadow-dialog);
+  background: transparent;
 }
 
 .ads-about-dialog::backdrop {
@@ -700,11 +701,15 @@ details[open] > summary > .ads-disclosure::before {
 
 .ads-about-panel {
   display: grid;
-  gap: 12px;
+  gap: 8px;
+  border: 1px solid var(--ads-panel-border);
+  border-radius: 4px;
   padding: 14px;
+  background: var(--ads-dialog-panel);
+  box-shadow: var(--ads-shadow-dialog);
 }
 
-.ads-about-panel p {
+.ads-about-description {
   margin: 0;
   color: var(--ads-muted);
   font-size: 12px;
@@ -712,13 +717,17 @@ details[open] > summary > .ads-disclosure::before {
 }
 
 .ads-about-name {
+  margin: 0;
   font-weight: 700;
+  font-size: 16px;
 }
 
-.ads-about-module {
-  margin-top: 2px;
+.ads-about-version,
+.ads-about-detail {
+  margin: 0;
   color: var(--ads-muted);
   font-size: 12px;
+  line-height: 1.35;
 }
 
 .ads-about-panel form {
