@@ -56,6 +56,17 @@ Pass `minScore` when callers should suppress weak candidates and their diagnosti
 
 Use `includeTypes` and `excludeTypes` to limit candidate matching by type name. Values can be local names such as `SubjectPublicKeyInfo` or qualified names such as `PkiComponents.SubjectPublicKeyInfo`.
 
+For the built-in PKI corpus, `getPkiProfileTypeNames()` provides convenient presets for `x509`, `pkcs10`, `pkcs8`, `cms`, and shared `components` matching:
+
+```ts
+import { getPkiProfileTypeNames } from '@pkistudio/asn1defsifter';
+
+const candidates = findAsn1Candidates(node, {
+	schemaCorpus: corpus,
+	includeTypes: getPkiProfileTypeNames(['x509', 'pkcs8'])
+});
+```
+
 For agent or workbench integrations, `createCandidateReport()` wraps parsing, feature extraction, candidate ranking, and document hypotheses into one JSON-friendly result:
 
 ```ts

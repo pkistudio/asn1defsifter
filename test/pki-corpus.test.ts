@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { createPkiComponentCorpus, findAsn1Candidates } from '../src/core';
+import { createPkiComponentCorpus, findAsn1Candidates, getPkiProfileTypeNames, pkiProfileTypeNames } from '../src/core';
 import { bitString, context, integer, nullNode, octetString, oid, sequence, set, utf8String } from './fixtures';
 
 describe('createPkiComponentCorpus', () => {
@@ -69,5 +69,29 @@ describe('createPkiComponentCorpus', () => {
     expect(candidates[0].typeName).toBe('CertificationRequestInfo');
     expect(candidates[0].evidence).toContain('Context-specific tag [0] matches implicit tagging.');
     expect(candidates[0].evidence).toContain('Node matches SET OF container.');
+  });
+
+  it('provides PKI profile type presets for candidate filters', () => {
+    expect(pkiProfileTypeNames.x509).toContain('Certificate');
+    expect(pkiProfileTypeNames.pkcs10).toContain('CertificationRequest');
+    expect(pkiProfileTypeNames.pkcs8).toContain('PrivateKeyInfo');
+    expect(pkiProfileTypeNames.cms).toContain('ContentInfo');
+
+    const merged = getPkiProfileTypeNames(['x509', 'pkcs8']);
+    expect(merged).toContain('Certificate');
+    expect(merged).toContain('PrivateKeyInfo');
+    expect(merged.filter((name) => name === 'AlgorithmIdentifier')).toHaveLength(1);
+  });
+
+  it('uses PKI profile presets with candidate filters', () => {
+    const node = sequence([integer(), sequence([oid('1.2.840.113549.1.1.1'), nullNode()]), octetString()]);
+    const candidates = findAsn1Candidates(node, {
+      schemaCorpus: createPkiComponentCorpus(),
+      includeTypes: getPkiProfileTypeNames('pkcs8'),
+      maxResults: 5
+    });
+
+    expect(candidates[0].typeName).toBe('PrivateKeyInfo');
+    expect(candidates.map((candidate) => candidate.typeName)).not.toContain('Certificate');
   });
 });
