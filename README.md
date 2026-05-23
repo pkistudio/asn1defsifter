@@ -103,6 +103,8 @@ npm run smoke
 
 The smoke command builds the package and runs a real DER hex fragment through the public API. It should report `PkiComponents.AlgorithmIdentifier` as the best candidate.
 
+The CI workflow runs the same verification set on pushes and pull requests targeting `main`.
+
 For package or release-related changes, also run:
 
 ```sh

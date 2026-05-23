@@ -21,6 +21,7 @@
   - `npm run check`
   - `npm test`
   - `npm run build`
+  - `npm run smoke`
 - Package preview command: `npm run pack:dry-run`
 - Published package verification:
   - `npm view @pkistudio/asn1defsifter@<version> version dist-tags dist.tarball --json`

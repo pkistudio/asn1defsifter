@@ -58,6 +58,7 @@ npm view @pkistudio/asn1defsifter version --json
 ## GitHub And Release Notes
 
 - Prefer `gh` for GitHub issue, PR, tag, and release operations when available.
+- CI runs `npm ci`, `npm run check`, `npm test`, `npm run build`, `npm run smoke`, and `npm run pack:dry-run` on pushes and pull requests targeting `main`.
 - Do not merge PRs unless the user explicitly asks to proceed.
 - npm publication targets `@pkistudio/asn1defsifter` and requires explicit user approval.
 - Public repository preparation should keep README, package metadata, license, and package exports ready for external users.
