@@ -437,7 +437,25 @@ function isBinaryPrimitive(node: TlvNode | undefined): boolean {
 }
 
 function sortSubtreeNodes(nodes: SubtreeDisplayNode[]): SubtreeDisplayNode[] {
-  return [...nodes].sort((left, right) => getBestSubtreeScore(right.subtree) - getBestSubtreeScore(left.subtree) || left.subtree.path.localeCompare(right.subtree.path));
+  return [...nodes].sort((left, right) => compareSubtreePath(left.subtree.path, right.subtree.path));
+}
+
+function compareSubtreePath(leftPath: string, rightPath: string): number {
+  const leftIndexes = pathIndexes(leftPath);
+  const rightIndexes = pathIndexes(rightPath);
+  const length = Math.max(leftIndexes.length, rightIndexes.length);
+  for (let index = 0; index < length; index += 1) {
+    const left = leftIndexes[index];
+    const right = rightIndexes[index];
+    if (left === undefined) return -1;
+    if (right === undefined) return 1;
+    if (left !== right) return left - right;
+  }
+  return leftPath.localeCompare(rightPath);
+}
+
+function pathIndexes(path: string): number[] {
+  return path.split('.').slice(1).map((part) => Number.parseInt(part, 10));
 }
 
 function parentPath(path: string): string {
@@ -732,10 +750,6 @@ function formatScore(score: number): string {
 
 function sortCandidatesByScore(candidates: Candidate[]): Candidate[] {
   return [...candidates].sort((left, right) => right.score - left.score || formatCandidateName(left).localeCompare(formatCandidateName(right)));
-}
-
-function getBestSubtreeScore(subtree: CandidateReportSubtree): number {
-  return Math.max(...subtree.candidates.map((candidate) => candidate.score), 0);
 }
 
 function formatDuration(startedAt: number): string {
