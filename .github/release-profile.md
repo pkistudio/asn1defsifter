@@ -6,7 +6,7 @@
 - Product name: `ASN.1 Definition Sifter`
 - npm package name: `@pkistudio/asn1defsifter`
 - Hosted Pages URL: `https://pkistudio.github.io/asn1defsifter/`
-- Documentation path: `docs/`
+- Documentation URL: `https://github.com/pkistudio/asn1defsifter/wiki`
 - ADR path: `docs/adr/`
 
 ## Version And Build
@@ -15,7 +15,7 @@
   - `package.json`
   - `package-lock.json`
   - `README.md` (`Current version:`)
-- Version source: `package.json`
+- Version source: `package.json` is the source for the package version.
 - Install command: `npm ci`
 - Build command: `npm run build`
 - Verification commands:
@@ -29,21 +29,25 @@
 
 ## Publishing
 
+- npm publish workflow: `.github/workflows/publish-npm.yml`
+- npm publish command in workflow: `npm publish --provenance --access public`
 - npm publication requires explicit user approval.
 - GitHub Release requires explicit user approval.
-- Stable published tags should have a GitHub Release marked as latest unless instructed otherwise.
+- Stable published tags should have a GitHub Release marked as latest unless the user instructs otherwise.
 - WordPress post workflow: `.github/workflows/publish-release-to-wordpress.yml`
 - WordPress post title pattern: `ASN.1 Definition Sifter <tag> をリリースしました`
-- WordPress posting requires the configured repository secrets and release publication event or manual workflow dispatch.
 
 ## Pages And Wiki
 
 - Pages workflow: `.github/workflows/pages.yml`
-- Pages URL: `https://pkistudio.github.io/asn1defsifter/`
 - Pages artifact path: `pages-dist`
+- Wiki path in Codespaces: `/workspaces/asn1defsifter.wiki`
+- Keep Wiki work separate from main repository work unless explicitly requested.
 
 ## Special Hooks
 
-- Keep the package browser-first and host-neutral.
+- Keep the package browser-first and host-neutral. VS Code-specific file access, dialogs, persistence, and Webview lifecycle belong outside this package.
 - Keep documentation and commit messages in English.
 - Keep PkiStudioJS and ASN.1 Instance Builder integration in adapters rather than embedding their internals into the core matcher.
+- Updating `@pkistudio/pkistudiojs` or `@pkistudio/asn1instancebuilder` for viewer compatibility is normally a dependency and documentation update, not an ASN.1 Definition Sifter feature change.
+- Browser verification command: `npm run dev -- --port 5173 --strictPort`.
