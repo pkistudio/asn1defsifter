@@ -28,6 +28,11 @@ type LogEntry = {
   timestamp: Date;
 };
 
+type CandidateSelection = {
+  candidate: Candidate;
+  context: string;
+};
+
 const MAX_LOG_ENTRIES = 200;
 const DEFAULT_HEX_SOURCE = 'clipboard.hex';
 
@@ -71,7 +76,16 @@ export function initAsn1DefinitionSifter(options: Asn1DefinitionSifterAppOptions
             <strong>Candidates</strong>
             <button id="adsClearButton" type="button">Clear</button>
           </header>
-          <div id="adsCandidateTree" class="ads-pane-content ads-tree" aria-label="Candidate tree">No candidate report yet.</div>
+          <div class="ads-candidate-split">
+            <div id="adsCandidateTree" class="ads-pane-content ads-tree" aria-label="Candidate tree">No candidate report yet.</div>
+            <section class="ads-selected-pane" aria-label="Selected candidate details">
+              <header class="ads-selected-header">
+                <strong>Selected Candidate</strong>
+                <span id="adsSelectedCandidateSummary">None</span>
+              </header>
+              <div id="adsCandidateDetail" class="ads-selected-detail">Select a candidate to inspect evidence, diagnostics, ambiguities, and matched paths.</div>
+            </section>
+          </div>
           <div id="adsCandidateNotice" class="ads-notice" role="status">Candidate results will appear after input is loaded.</div>
         </section>
       </section>
@@ -95,6 +109,8 @@ export function initAsn1DefinitionSifter(options: Asn1DefinitionSifterAppOptions
   const hexView = getElement<HTMLElement>(app, '#adsHexView');
   const inputNotice = getElement<HTMLElement>(app, '#adsInputNotice');
   const candidateTree = getElement<HTMLElement>(app, '#adsCandidateTree');
+  const selectedCandidateSummary = getElement<HTMLElement>(app, '#adsSelectedCandidateSummary');
+  const candidateDetail = getElement<HTMLElement>(app, '#adsCandidateDetail');
   const candidateNotice = getElement<HTMLElement>(app, '#adsCandidateNotice');
   const apiLog = getElement<HTMLElement>(app, '#adsApiLog');
 
@@ -126,7 +142,10 @@ export function initAsn1DefinitionSifter(options: Asn1DefinitionSifterAppOptions
         maxResults: 8
       });
       state.report = report;
-      renderCandidateTree(candidateTree, report);
+      renderCandidateTree(candidateTree, report, (selection, selectedElement) => {
+        renderSelectedCandidate(candidateDetail, selectedCandidateSummary, selection);
+        markSelectedTreeItem(candidateTree, selectedElement);
+      });
       const rootCount = report.roots.length;
       const candidateCount = report.roots.reduce((sum, root) => sum + root.candidates.length, 0);
       const subtreeCount = report.roots.reduce((sum, root) => sum + (root.subtrees?.length ?? 0), 0);
@@ -135,6 +154,7 @@ export function initAsn1DefinitionSifter(options: Asn1DefinitionSifterAppOptions
     } catch (error) {
       state.report = null;
       candidateTree.textContent = 'No candidate report available.';
+      renderSelectedCandidate(candidateDetail, selectedCandidateSummary);
       const message = getErrorMessage(error);
       setCandidateNotice(message);
       addLog('error', 'createPkiCandidateReport failed', message);
@@ -152,6 +172,7 @@ export function initAsn1DefinitionSifter(options: Asn1DefinitionSifterAppOptions
     state.bytes = null;
     hexView.textContent = 'No DER input loaded.';
     candidateTree.textContent = 'No candidate report yet.';
+    renderSelectedCandidate(candidateDetail, selectedCandidateSummary);
     setInputNotice('Load a DER file or paste hexadecimal DER from the clipboard.');
     setCandidateNotice('Candidate results will appear after input is loaded.');
     addLog('info', 'clear', 'Cleared input and candidate report.');
@@ -231,32 +252,36 @@ if (typeof window !== 'undefined') {
   window.Asn1DefinitionSifter = { init: initAsn1DefinitionSifter };
 }
 
-function renderCandidateTree(container: HTMLElement, report: CandidateReport): void {
+function renderCandidateTree(container: HTMLElement, report: CandidateReport, selectCandidate: (selection: CandidateSelection, selectedElement: HTMLElement) => void): void {
   container.innerHTML = '';
   if (report.roots.length === 0) {
     container.textContent = 'No root TLV nodes were parsed.';
     return;
   }
+  let firstSelection: { selection: CandidateSelection; selectedElement: HTMLElement } | undefined;
   for (const root of report.roots) {
     const subtrees = sortSubtreesByBestScore(root.subtrees ?? []);
     for (const candidate of sortCandidatesByScore(root.candidates)) {
-      container.append(createRootCandidateNode(candidate, root, subtrees));
+      const candidateNode = createRootCandidateNode(candidate, root, subtrees, selectCandidate);
+      firstSelection ??= { selection: { candidate, context: `Root ${root.index}` }, selectedElement: getTreeSummary(candidateNode) };
+      container.append(candidateNode);
     }
-    if (root.candidates.length === 0) container.append(createEmptyRootNode(root, subtrees));
+    if (root.candidates.length === 0) container.append(createEmptyRootNode(root, subtrees, selectCandidate));
   }
+  if (firstSelection) selectCandidate(firstSelection.selection, firstSelection.selectedElement);
 }
 
-function createRootCandidateNode(candidate: Candidate, root: CandidateReportRoot, subtrees: CandidateReportSubtree[]): HTMLElement {
+function createRootCandidateNode(candidate: Candidate, root: CandidateReportRoot, subtrees: CandidateReportSubtree[], selectCandidate: (selection: CandidateSelection, selectedElement: HTMLElement) => void): HTMLElement {
   const details = document.createElement('details');
   details.className = 'ads-tree-node ads-candidate-node';
-  details.append(createSummary(formatCandidateName(candidate), `Root ${root.index} · ${formatScore(candidate.score)} · ${candidate.confidence}`));
-  const body = createCandidateDetail(candidate);
-  if (subtrees.length > 0) body.append(createSubtreeGroup(subtrees));
-  details.append(body);
+  const summary = createSummary(formatCandidateName(candidate), `Root ${root.index} · ${formatScore(candidate.score)} · ${candidate.confidence}`);
+  summary.addEventListener('click', () => selectCandidate({ candidate, context: `Root ${root.index}` }, summary));
+  details.append(summary);
+  if (subtrees.length > 0) details.append(createSubtreeGroup(subtrees, selectCandidate));
   return details;
 }
 
-function createEmptyRootNode(root: CandidateReportRoot, subtrees: CandidateReportSubtree[]): HTMLElement {
+function createEmptyRootNode(root: CandidateReportRoot, subtrees: CandidateReportSubtree[], selectCandidate: (selection: CandidateSelection, selectedElement: HTMLElement) => void): HTMLElement {
   const details = document.createElement('details');
   details.className = 'ads-tree-node';
   details.open = true;
@@ -264,62 +289,87 @@ function createEmptyRootNode(root: CandidateReportRoot, subtrees: CandidateRepor
   if (subtrees.length > 0) {
     const list = document.createElement('div');
     list.className = 'ads-tree-children';
-    for (const subtree of subtrees) list.append(createSubtreeNode(subtree));
+    for (const subtree of subtrees) list.append(createSubtreeNode(subtree, selectCandidate));
     details.append(list);
   }
   return details;
 }
 
-function createSubtreeNode(subtree: CandidateReportSubtree): HTMLElement {
+function createSubtreeNode(subtree: CandidateReportSubtree, selectCandidate: (selection: CandidateSelection, selectedElement: HTMLElement) => void): HTMLElement {
   const details = document.createElement('details');
   details.className = 'ads-tree-node ads-subtree-node';
   const best = subtree.summary.bestCandidate;
   details.append(createSummary(`Subtree ${subtree.path}`, best ? `${formatCandidateName(best)} · ${formatScore(best.score)} · ${best.confidence}` : `${subtree.summary.candidateCount} candidate(s)`));
   const list = document.createElement('div');
   list.className = 'ads-tree-children';
-  for (const candidate of sortCandidatesByScore(subtree.candidates)) list.append(createCandidateNode(candidate));
+  for (const candidate of sortCandidatesByScore(subtree.candidates)) list.append(createCandidateNode(candidate, `Subtree ${subtree.path}`, selectCandidate));
   details.append(list);
   return details;
 }
 
-function createCandidateNode(candidate: Candidate): HTMLElement {
-  const details = document.createElement('details');
-  details.className = 'ads-tree-node ads-candidate-node';
-  details.append(createSummary(formatCandidateName(candidate), `${formatScore(candidate.score)} · ${candidate.confidence}`));
-  details.append(createCandidateDetail(candidate));
-  return details;
+function createCandidateNode(candidate: Candidate, context: string, selectCandidate: (selection: CandidateSelection, selectedElement: HTMLElement) => void): HTMLElement {
+  const item = document.createElement('button');
+  item.className = 'ads-tree-item ads-candidate-item';
+  item.type = 'button';
+  item.append(createTreeLabel(formatCandidateName(candidate)), createTreeNote(`${formatScore(candidate.score)} · ${candidate.confidence}`));
+  item.addEventListener('click', () => selectCandidate({ candidate, context }, item));
+  return item;
 }
 
-function createCandidateDetail(candidate: Candidate): HTMLElement {
-  const body = document.createElement('div');
-  body.className = 'ads-candidate-detail';
-  body.append(createKeyValue('Evidence', candidate.evidence.slice(0, 5).join('\n') || 'No evidence.'));
-  body.append(createKeyValue('Diagnostics', candidate.diagnostics.slice(0, 5).map((diagnostic) => `${diagnostic.severity}: ${diagnostic.message}`).join('\n') || 'No diagnostics.'));
-  body.append(createKeyValue('Ambiguities', candidate.ambiguities.slice(0, 5).join('\n') || 'No ambiguities.'));
-  body.append(createKeyValue('Matched paths', candidate.matchedPaths.slice(0, 8).map((path) => `${path.nodePath} -> ${path.schemaPath}`).join('\n') || 'No matched paths.'));
-  return body;
+function renderSelectedCandidate(container: HTMLElement, summary: HTMLElement, selection?: CandidateSelection): void {
+  container.innerHTML = '';
+  if (!selection) {
+    summary.textContent = 'None';
+    container.textContent = 'Select a candidate to inspect evidence, diagnostics, ambiguities, and matched paths.';
+    return;
+  }
+  const { candidate, context } = selection;
+  summary.textContent = `${context} · ${formatCandidateName(candidate)} · ${formatScore(candidate.score)} · ${candidate.confidence}`;
+  container.append(createKeyValue('Evidence', candidate.evidence.slice(0, 8).join('\n') || 'No evidence.'));
+  container.append(createKeyValue('Diagnostics', candidate.diagnostics.slice(0, 8).map((diagnostic) => `${diagnostic.severity}: ${diagnostic.message}`).join('\n') || 'No diagnostics.'));
+  container.append(createKeyValue('Ambiguities', candidate.ambiguities.slice(0, 8).join('\n') || 'No ambiguities.'));
+  container.append(createKeyValue('Matched paths', candidate.matchedPaths.slice(0, 12).map((path) => `${path.nodePath} -> ${path.schemaPath}`).join('\n') || 'No matched paths.'));
 }
 
-function createSubtreeGroup(subtrees: CandidateReportSubtree[]): HTMLElement {
+function createSubtreeGroup(subtrees: CandidateReportSubtree[], selectCandidate: (selection: CandidateSelection, selectedElement: HTMLElement) => void): HTMLElement {
   const details = document.createElement('details');
   details.className = 'ads-tree-node ads-subtree-group';
   details.append(createSummary('Subtree candidates', `${subtrees.length} subtree report(s)`));
   const list = document.createElement('div');
   list.className = 'ads-tree-children';
-  for (const subtree of subtrees) list.append(createSubtreeNode(subtree));
+  for (const subtree of subtrees) list.append(createSubtreeNode(subtree, selectCandidate));
   details.append(list);
   return details;
 }
 
 function createSummary(label: string, note: string): HTMLElement {
   const summary = document.createElement('summary');
+  summary.append(createTreeLabel(label), createTreeNote(note));
+  return summary;
+}
+
+function createTreeLabel(label: string): HTMLElement {
   const labelElement = document.createElement('span');
   labelElement.className = 'ads-tree-label';
   labelElement.textContent = label;
+  return labelElement;
+}
+
+function createTreeNote(note: string): HTMLElement {
   const noteElement = document.createElement('span');
   noteElement.className = 'ads-tree-note';
   noteElement.textContent = note;
-  summary.append(labelElement, noteElement);
+  return noteElement;
+}
+
+function markSelectedTreeItem(container: HTMLElement, selectedElement: HTMLElement): void {
+  for (const element of container.querySelectorAll('.ads-tree-selected')) element.classList.remove('ads-tree-selected');
+  selectedElement.classList.add('ads-tree-selected');
+}
+
+function getTreeSummary(node: HTMLElement): HTMLElement {
+  const summary = node.querySelector<HTMLElement>('summary');
+  if (!summary) throw new Error('Candidate tree node is missing a summary.');
   return summary;
 }
 

@@ -101,7 +101,7 @@ Pass `includeSubtrees: true` to add bounded candidate reports for child TLV node
 
 ## Standalone Viewer
 
-The package includes a small browser viewer for exercising the resolver without embedding it into another PkiStudio surface. It provides a left pane for DER hex input, a right pane for score-sorted root and subtree candidate results, and a bottom API log pane.
+The package includes a small browser viewer for exercising the resolver without embedding it into another PkiStudio surface. It provides a left pane for DER hex input, a right pane split between a score-sorted candidate tree and selected candidate details, and a bottom API log pane.
 
 ```ts
 import { initAsn1DefinitionSifter } from '@pkistudio/asn1defsifter/app';

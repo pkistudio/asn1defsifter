@@ -140,6 +140,13 @@ button:hover {
   background: #fbfcfd;
 }
 
+.ads-candidate-split {
+  display: grid;
+  grid-template-rows: minmax(180px, 52%) minmax(160px, 1fr);
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
 .ads-tree-node {
   margin: 0 0 6px;
 }
@@ -155,6 +162,26 @@ button:hover {
   padding: 5px 8px;
   background: #ffffff;
   cursor: pointer;
+}
+
+.ads-tree-item {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: center;
+  width: 100%;
+  min-height: 32px;
+  margin: 0 0 6px;
+  border: 1px solid #d4dde6;
+  border-radius: 4px;
+  padding: 5px 8px;
+  background: #ffffff;
+  text-align: left;
+}
+
+.ads-tree-selected {
+  border-color: #3273b9 !important;
+  background: #eaf4ff !important;
 }
 
 .ads-subtree-node summary {
@@ -184,10 +211,41 @@ button:hover {
   border-left: 1px solid #ccd6e0;
 }
 
-.ads-candidate-detail {
+.ads-selected-pane {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  border-top: 1px solid #c9d2dc;
+  background: #f9fbfc;
+}
+
+.ads-selected-header {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 10px;
+  align-items: center;
+  min-height: 34px;
+  padding: 6px 10px;
+  border-bottom: 1px solid #d6dee6;
+  background: #ffffff;
+  font-size: 12px;
+}
+
+.ads-selected-header span {
+  overflow: hidden;
+  color: #56677a;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ads-selected-detail {
   display: grid;
   gap: 8px;
-  margin: 6px 0 8px 14px;
+  align-content: start;
+  min-height: 0;
+  overflow: auto;
+  padding: 10px;
+  color: #405063;
 }
 
 .ads-key-value {
