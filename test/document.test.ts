@@ -15,4 +15,24 @@ END`);
     });
     expect(hypotheses[0].annotatedTree[0].schemaPath).toBe('VersionedObject');
   });
+
+  it('annotates matched fields and defined types', () => {
+    const corpus = parseAsn1DefinitionCorpus(`Example DEFINITIONS ::= BEGIN
+CertificateSerialNumber ::= INTEGER
+Holder ::= SEQUENCE { serialNumber CertificateSerialNumber, version INTEGER }
+END`);
+    const hypotheses = identifyAsn1Document(sequence([integer(), integer()]), { schemaCorpus: corpus });
+    const [serialNumberNode, versionNode] = hypotheses[0].annotatedTree[0].children;
+
+    expect(serialNumberNode).toMatchObject({
+      fieldName: 'serialNumber',
+      asn1Type: 'CertificateSerialNumber',
+      schemaPath: 'Holder.serialNumber.CertificateSerialNumber'
+    });
+    expect(versionNode).toMatchObject({
+      fieldName: 'version',
+      schemaPath: 'Holder.version'
+    });
+    expect(versionNode.asn1Type).toBeUndefined();
+  });
 });

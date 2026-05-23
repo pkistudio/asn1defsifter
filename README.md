@@ -93,7 +93,7 @@ console.log(report.roots[0].candidates[0]);
 
 Use `createCandidateReportFromNodes(nodes)` when a host already has neutral TLV nodes and should not parse the input again.
 
-Each report root includes `summary`, `features`, `candidates`, `hypotheses`, aggregated `diagnostics`, and aggregated `ambiguities`.
+Each report root includes `summary`, `features`, `candidates`, `hypotheses`, aggregated `diagnostics`, and aggregated `ambiguities`. Hypothesis `annotatedTree` entries include TLV tag names, schema paths, inferred field names, and referenced ASN.1 type names when that information is available from the match.
 
 Pass `includeSubtrees: true` to add bounded candidate reports for child TLV nodes. Use `maxSubtreeDepth` and `maxSubtreeReports` to keep report size predictable. Subtree reports omit nodes with no candidates by default; pass `includeEmptySubtrees: true` when exhaustive child-node reporting is needed.
 
