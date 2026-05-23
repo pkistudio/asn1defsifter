@@ -175,6 +175,8 @@ For package or release-related changes, also run:
 npm run pack:dry-run
 ```
 
+Publishing to npm is handled by the `Publish npm package` GitHub Actions workflow. Configure npm trusted publishing for this repository and workflow, create and push a `v<package version>` tag, then let the tag-triggered workflow publish the package, or run the workflow manually with the same tag. The workflow verifies that the tag matches `package.json`, runs the local verification commands, inspects the package contents, and publishes `@pkistudio/asn1defsifter` with npm provenance.
+
 ## License
 
 ASN.1 Definition Sifter is licensed under the MIT License. See [LICENSE](LICENSE).
