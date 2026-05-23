@@ -20,13 +20,23 @@
     "./core": {
       "types": "./dist/types/core.d.ts",
       "import": "./dist/core.js"
-    }
+    },
+    "./app": {
+      "types": "./dist/types/app.d.ts",
+      "import": "./dist/app.js"
+    },
+    "./styles.css": "./dist/styles.css"
   },
+  "sideEffects": [
+    "*.css"
+  ],
   "scripts": {
     "clean": "node -e \"require('node:fs').rmSync('dist',{recursive:true,force:true})\"",
+    "dev": "vite --host 0.0.0.0",
     "build": "npm run clean && npm run build:types && npm run build:lib",
     "build:lib": "vite build",
     "build:types": "tsc -p tsconfig.types.json",
+    "preview": "vite preview --host 0.0.0.0",
     "check": "tsc --noEmit",
     "smoke": "npm run build && node scripts/smoke.mjs",
     "test": "vitest run",

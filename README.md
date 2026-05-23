@@ -26,6 +26,8 @@ Package exports:
 
 - `@pkistudio/asn1defsifter`: Core API.
 - `@pkistudio/asn1defsifter/core`: Core API alias.
+- `@pkistudio/asn1defsifter/app`: Standalone viewer app initializer.
+- `@pkistudio/asn1defsifter/styles.css`: Standalone viewer styles.
 
 ## Core API
 
@@ -96,6 +98,23 @@ Use `createCandidateReportFromNodes(nodes)` when a host already has neutral TLV 
 Each report root includes `summary`, `features`, `candidates`, `hypotheses`, aggregated `diagnostics`, and aggregated `ambiguities`. Hypothesis `annotatedTree` entries include TLV tag names, schema paths, inferred field names, and referenced ASN.1 type names when that information is available from the match.
 
 Pass `includeSubtrees: true` to add bounded candidate reports for child TLV nodes. Use `maxSubtreeDepth` and `maxSubtreeReports` to keep report size predictable. Subtree reports omit nodes with no candidates by default; pass `includeEmptySubtrees: true` when exhaustive child-node reporting is needed.
+
+## Standalone Viewer
+
+The package includes a small browser viewer for exercising the resolver without embedding it into another PkiStudio surface. It provides a left pane for DER hex input, a right pane for root and subtree candidate results, and a bottom API log pane.
+
+```ts
+import { initAsn1DefinitionSifter } from '@pkistudio/asn1defsifter/app';
+import '@pkistudio/asn1defsifter/styles.css';
+
+initAsn1DefinitionSifter({ mount: '#app' });
+```
+
+Run the local viewer with:
+
+```sh
+npm run dev
+```
 
 ## Relationship To PkiStudio Projects
 
