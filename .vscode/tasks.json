@@ -1,0 +1,29 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "Start asn1defsifter server",
+      "type": "shell",
+      "command": "npm run dev -- --port 5173 --strictPort",
+      "isBackground": true,
+      "problemMatcher": {
+        "owner": "vite",
+        "pattern": {
+          "regexp": "^$"
+        },
+        "background": {
+          "activeOnStart": true,
+          "beginsPattern": "vite.*building|VITE v.*ready",
+          "endsPattern": "Local:.*http://localhost:5173/"
+        }
+      }
+    },
+    {
+      "label": "Start asn1defsifter wiki",
+      "type": "shell",
+      "command": "gollum --host 0.0.0.0 --port 4567 /workspaces/asn1defsifter.wiki",
+      "isBackground": true,
+      "problemMatcher": []
+    }
+  ]
+}

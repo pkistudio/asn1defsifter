@@ -1,6 +1,6 @@
 {
   "name": "@pkistudio/asn1defsifter",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Explainable ASN.1 definition candidate resolver for DER fragments.",
   "type": "module",
   "main": "./dist/index.js",
