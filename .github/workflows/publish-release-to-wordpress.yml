@@ -59,6 +59,14 @@ jobs:
               text = re.sub(r"[^a-z0-9]+", "-", text)
               return text.strip("-")
 
+          def normalize_release_tag(text):
+              tag = text.strip()
+              if not tag:
+                  raise ValueError("Release tag is required.")
+              if tag[0].isdigit():
+                  tag = f"v{tag}"
+              return tag
+
           def request_json(method, url, payload=None, headers=None):
               data = None
               if payload is not None:
@@ -94,14 +102,15 @@ jobs:
               )
 
           if event_name == "workflow_dispatch":
-              tag = os.environ["INPUT_TAG"]
+              tag = normalize_release_tag(os.environ["INPUT_TAG"])
+              print(f"Loading GitHub Release for tag: {tag}")
               release = github_request(f"/releases/tags/{urllib.parse.quote(tag, safe='')}")
               name = release.get("name") or tag
               url = release["html_url"]
               body = release.get("body") or ""
               published_at = release.get("published_at") or ""
           else:
-              tag = os.environ["RELEASE_TAG"]
+              tag = normalize_release_tag(os.environ["RELEASE_TAG"])
               name = os.environ.get("RELEASE_NAME") or tag
               url = os.environ["RELEASE_URL"]
               body = os.environ.get("RELEASE_BODY") or ""
