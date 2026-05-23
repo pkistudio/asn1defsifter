@@ -89,6 +89,24 @@ describe('createPkiComponentCorpus', () => {
     });
   });
 
+  it('matches TBSCertificate when optional unique identifiers are omitted before extensions', () => {
+    const algorithmIdentifier = sequence([oid('1.2.840.113549.1.1.11'), nullNode()]);
+    const name = sequence([set([sequence([oid('2.5.4.3'), utf8String('Example CA')])])]);
+    const time = { tagClass: 'universal' as const, tagNumber: 23, constructed: false, tagName: 'UTCTime', value: '260101000000Z' };
+    const validity = sequence([time, time]);
+    const subjectPublicKeyInfo = sequence([sequence([oid('1.2.840.113549.1.1.1'), nullNode()]), bitString()]);
+    const extension = sequence([oid('2.5.29.14'), octetString()]);
+    const extensions = context(3, [sequence([extension])]);
+    const node = sequence([context(0, [integer()]), integer(), algorithmIdentifier, name, validity, name, subjectPublicKeyInfo, extensions]);
+    const candidates = findAsn1Candidates(node, { schemaCorpus: createPkiComponentCorpus(), maxResults: 5 });
+
+    expect(candidates[0]).toMatchObject({
+      typeName: 'TBSCertificate',
+      score: 1,
+      confidence: 'high'
+    });
+  });
+
   it('keeps SET OF containers available for PKI name fragments', () => {
     const node = set([sequence([oid('2.5.4.3'), utf8String('Example CA')])]);
     const candidates = findAsn1Candidates(node, { schemaCorpus: createPkiComponentCorpus(), maxResults: 5 });

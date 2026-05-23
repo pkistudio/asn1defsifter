@@ -202,7 +202,7 @@ function matchSet(node: TlvNode, fields: Asn1Field[], state: MatchState, schemaP
 }
 
 function scoreAbsentAllowedField(field: Asn1Field): number {
-  return field.defaultValue !== undefined ? 1 : 0.75;
+  return field.optional || field.defaultValue !== undefined ? 1 : 0;
 }
 
 function matchChoice(node: TlvNode, alternatives: Asn1Field[], state: MatchState, schemaPath: string, nodePath: string): number {
