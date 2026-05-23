@@ -10,6 +10,8 @@ describe('createPkiComponentCorpus', () => {
     expect(typeNames).toContain('AlgorithmIdentifier');
     expect(typeNames).toContain('SubjectPublicKeyInfo');
     expect(typeNames).toContain('RSAPublicKey');
+    expect(typeNames).toContain('DSA-Sig-Value');
+    expect(typeNames).toContain('ECDSA-Sig-Value');
     expect(typeNames).toContain('SignatureValue');
     expect(typeNames).toContain('Certificate');
     expect(typeNames).toContain('CertificationRequest');
@@ -44,9 +46,37 @@ describe('createPkiComponentCorpus', () => {
     const node = sequence([integer(), integer()]);
     const candidates = findAsn1Candidates(node, { schemaCorpus: createPkiComponentCorpus(), maxResults: 5 });
 
-    expect(candidates[0]).toMatchObject({
+    expect(candidates.find((candidate) => candidate.typeName === 'RSAPublicKey')).toMatchObject({
       typeName: 'RSAPublicKey',
       moduleName: 'PkiComponents',
+      confidence: 'high'
+    });
+  });
+
+  it('requires the RFC 8017 RSAPublicKey two-INTEGER SEQUENCE shape', () => {
+    const corpus = createPkiComponentCorpus();
+    const bitStringCandidates = findAsn1Candidates(bitString(), { schemaCorpus: corpus, includeTypes: ['RSAPublicKey'], maxResults: 5 });
+    const extraChildCandidates = findAsn1Candidates(sequence([integer(), integer(), integer()]), { schemaCorpus: corpus, includeTypes: ['RSAPublicKey'], maxResults: 5 });
+    const negativeIntegerCandidates = findAsn1Candidates(sequence([integer(new Uint8Array([0x80])), integer()]), { schemaCorpus: corpus, includeTypes: ['RSAPublicKey'], maxResults: 5 });
+
+    expect(bitStringCandidates).toEqual([]);
+    expect(extraChildCandidates).toEqual([]);
+    expect(negativeIntegerCandidates).toEqual([]);
+  });
+
+  it('matches DSA and ECDSA signature values from their two-INTEGER SEQUENCE shape', () => {
+    const node = sequence([integer(), integer()]);
+    const candidates = findAsn1Candidates(node, { schemaCorpus: createPkiComponentCorpus(), maxResults: 8 });
+
+    expect(candidates.map((candidate) => candidate.typeName)).toEqual(
+      expect.arrayContaining(['DSA-Sig-Value', 'ECDSA-Sig-Value', 'RSAPublicKey'])
+    );
+    expect(candidates.find((candidate) => candidate.typeName === 'DSA-Sig-Value')).toMatchObject({
+      score: 1,
+      confidence: 'high'
+    });
+    expect(candidates.find((candidate) => candidate.typeName === 'ECDSA-Sig-Value')).toMatchObject({
+      score: 1,
       confidence: 'high'
     });
   });
@@ -158,8 +188,12 @@ describe('createPkiComponentCorpus', () => {
   it('provides PKI profile type presets for candidate filters', () => {
     expect(pkiProfileTypeNames.x509).toContain('Certificate');
     expect(pkiProfileTypeNames.x509).toContain('RSAPublicKey');
+    expect(pkiProfileTypeNames.x509).toContain('DSA-Sig-Value');
+    expect(pkiProfileTypeNames.x509).toContain('ECDSA-Sig-Value');
     expect(pkiProfileTypeNames.x509).toContain('SignatureValue');
     expect(pkiProfileTypeNames.pkcs10).toContain('CertificationRequest');
+    expect(pkiProfileTypeNames.pkcs10).toContain('DSA-Sig-Value');
+    expect(pkiProfileTypeNames.pkcs10).toContain('ECDSA-Sig-Value');
     expect(pkiProfileTypeNames.pkcs8).toContain('PrivateKeyInfo');
     expect(pkiProfileTypeNames.cms).toContain('ContentInfo');
 

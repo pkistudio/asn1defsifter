@@ -10,7 +10,7 @@ export function findAsn1Candidates(node: TlvNode, options: CandidateOptions): Ca
     .filter((target) => isIncludedTarget(target, options))
     .map(({ module, definition }) => {
       const result = matchType(node, definition.type, module, definition.name);
-      const score = clampScore(result.score);
+      const score = clampScore(applySemanticCandidateConstraints(node, module.name, definition.name, result.score));
       return {
         typeName: definition.name,
         moduleName: module.name,
@@ -34,4 +34,24 @@ function isIncludedTarget(target: SchemaCandidateTarget, options: CandidateOptio
   if (includeTypes && !names.some((name) => includeTypes.has(name))) return false;
   if (excludeTypes && names.some((name) => excludeTypes.has(name))) return false;
   return true;
+}
+
+function applySemanticCandidateConstraints(node: TlvNode, moduleName: string, typeName: string, score: number): number {
+  if (moduleName === 'PkiComponents' && typeName === 'RSAPublicKey' && !isRfc8017RsaPublicKey(node)) return 0;
+  return score;
+}
+
+function isRfc8017RsaPublicKey(node: TlvNode): boolean {
+  const children = node.children ?? [];
+  return node.tagClass === 'universal'
+    && node.tagNumber === 16
+    && node.constructed
+    && children.length === 2
+    && children.every(isPositiveDerInteger);
+}
+
+function isPositiveDerInteger(node: TlvNode): boolean {
+  if (node.tagClass !== 'universal' || node.tagNumber !== 2 || node.constructed) return false;
+  if (!node.valueBytes || node.valueBytes.length === 0) return true;
+  return (node.valueBytes[0] & 0x80) === 0 && node.valueBytes.some((byte) => byte !== 0);
 }

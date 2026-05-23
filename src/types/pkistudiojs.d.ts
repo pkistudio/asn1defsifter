@@ -14,3 +14,8 @@ declare module '@pkistudio/pkistudiojs/oid-resolver' {
   };
   export default oidResolver;
 }
+
+declare module '@pkistudio/pkistudiojs/viewer' {
+  const viewer: unknown;
+  export default viewer;
+}

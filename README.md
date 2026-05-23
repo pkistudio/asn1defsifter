@@ -13,7 +13,8 @@ Current version: 0.1.0
 - ASN.1 Schema Model matching through `@pkistudio/asn1instancebuilder` definitions.
 - Candidate ranking with numeric scores, confidence labels, evidence, diagnostics, ambiguity notes, and matched node/schema paths.
 - PkiStudioJS adapter for parsing supported ASN.1 inputs into resolver-ready TLV nodes.
-- Built-in PKI component corpus for common fragments such as `AlgorithmIdentifier`, `SubjectPublicKeyInfo`, `RSAPublicKey`, `SignatureValue`, EC named-curve parameters, `Certificate`, `CertificationRequest`, `PrivateKeyInfo`, and `ContentInfo`.
+- Built-in PKI component corpus for common fragments such as `AlgorithmIdentifier`, `SubjectPublicKeyInfo`, `RSAPublicKey`, `DSA-Sig-Value`, `ECDSA-Sig-Value`, `SignatureValue`, EC named-curve parameters, `Certificate`, `CertificationRequest`, `PrivateKeyInfo`, and `ContentInfo`.
+- PKI-aware semantic filtering for ambiguous structures, including RFC 8017 `RSAPublicKey` shape checks and signature/public-key context filters for integer-pair signatures.
 - Document hypothesis helper with annotated tree output.
 
 ## Install
@@ -99,9 +100,21 @@ Each report root includes `summary`, `features`, `candidates`, `hypotheses`, agg
 
 Pass `includeSubtrees: true` to add bounded candidate reports for child TLV nodes. Use `maxSubtreeDepth` and `maxSubtreeReports` to keep report size predictable. Subtree reports omit nodes with no candidates by default; pass `includeEmptySubtrees: true` when exhaustive child-node reporting is needed.
 
+## PKI Matching Notes
+
+The built-in PKI corpus includes RFC 8017 `RSAPublicKey`, `DSA-Sig-Value`, and `ECDSA-Sig-Value` definitions. Because DER shape alone cannot always distinguish structurally compatible `SEQUENCE { INTEGER, INTEGER }` values, the PKI report layer applies extra context rules:
+
+- `RSAPublicKey` is only kept when the candidate node has the RFC 8017 shape: exactly two positive DER INTEGER values, with a plausible modulus and exponent.
+- `DSA-Sig-Value` and `ECDSA-Sig-Value` are available for integer-pair signature values.
+- `RSAPublicKey` candidates are suppressed below signature BIT STRING contexts, and DSA/ECDSA signature candidates are suppressed below `subjectPublicKey` contexts.
+
+These filters keep the resolver deterministic while reducing common PKI false positives.
+
 ## Standalone Viewer
 
-The package includes a small browser viewer for exercising the resolver without embedding it into another PkiStudio surface. It provides a left pane split between full DER hex input and selected candidate bytes, a right pane split between a score-sorted candidate tree and selected candidate details, and a bottom API log pane. Terminal BIT STRING or OCTET STRING values with no ASN.1 candidates are shown as HEX-only tree items so raw key material, such as EC public points, remains inspectable without being mislabeled as another ASN.1 type.
+The package includes a small browser viewer for exercising the resolver without embedding it into another PkiStudio surface. It provides a left pane that is only an embedded read-only PkiStudioJS viewer, a candidate tree pane, a selected candidate details pane with selected bytes, and a bottom API log pane. Use the PkiStudioJS viewer's own `Load` menu to load data; the resolver watches the loaded viewer document and refreshes candidates from it. Terminal BIT STRING or OCTET STRING values with no ASN.1 candidates are shown as HEX-only tree items so raw key material, such as EC public points, remains inspectable without being mislabeled as another ASN.1 type.
+
+The embedded viewer stays read-only. Its `Send to` menu can open selected DER in a normal editable PkiStudioJS viewer tab through `viewer.html`; other editing-oriented context menu actions remain visible but disabled. Closing the embedded viewer clears the candidate and selected-candidate panes.
 
 ```ts
 import { initAsn1DefinitionSifter } from '@pkistudio/asn1defsifter/app';

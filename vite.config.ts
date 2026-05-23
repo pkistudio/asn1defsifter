@@ -14,7 +14,7 @@ export default defineConfig({
       fileName: (_format, entryName) => `${entryName}.js`
     },
     rollupOptions: {
-      external: ['@pkistudio/asn1instancebuilder', '@pkistudio/pkistudiojs/core', '@pkistudio/pkistudiojs/oid-resolver']
+      external: ['@pkistudio/asn1instancebuilder', '@pkistudio/pkistudiojs/core', '@pkistudio/pkistudiojs/oid-resolver', '@pkistudio/pkistudiojs/viewer']
     }
   }
 });

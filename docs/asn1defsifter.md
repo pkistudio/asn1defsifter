@@ -158,7 +158,7 @@ For each DER/TLV fragment, extract features such as:
 - explicit or implicit tagging patterns,
 - OPTIONAL/DEFAULT-compatible shape,
 - nested DER inside BIT STRING or OCTET STRING,
-- common PKI patterns such as AlgorithmIdentifier, Extension, Name, ContentInfo, SubjectPublicKeyInfo, RSAPublicKey, and SignatureValue.
+- common PKI patterns such as AlgorithmIdentifier, Extension, Name, ContentInfo, SubjectPublicKeyInfo, RSAPublicKey, DSA-Sig-Value, ECDSA-Sig-Value, and SignatureValue.
 
 ### Candidate Matching
 
@@ -351,20 +351,21 @@ The viewer is a development and verification surface, not the primary runtime co
 
 The app should use a three-pane layout:
 
-- left pane: input loading and DER hex display,
-- right pane: candidate tree view,
+- top-left pane: an embedded read-only PkiStudioJS viewer,
+- top-right pane: candidate tree view,
+- middle pane: selected candidate details and selected bytes,
 - bottom pane: API log output.
 
 The left and right panes should each have a main content area and a lower notification area. The bottom pane should behave like the API log area in ASN.1 Instance Builder, showing resolver calls, options, timings, warnings, and errors in chronological order.
 
 ### Left Pane
 
-The left pane should provide a `Load` menu with these actions:
+The left pane should be the embedded read-only PkiStudioJS viewer. Data loading should use the viewer's own `Load` menu actions:
 
 - `from File`: load ASN.1 input from a local file,
 - `from Clipboard as HEX`: read clipboard text as hexadecimal DER input.
 
-After loading, the left pane content area should show the loaded DER binary as formatted hexadecimal data. The lower notification area should show input-related messages such as load success, parse errors, byte length, detected input format, and clipboard validation errors.
+After loading, the resolver app should read the current document bytes from the read-only viewer and refresh the candidate report. The viewer should keep PkiStudioJS's normal read-only behavior for context-menu editing actions and should use PkiStudioJS `Send to` actions so selected ASN.1 nodes can be opened in the normal editable PkiStudioJS viewer in a new browser tab.
 
 ### Right Pane
 
@@ -378,15 +379,15 @@ Each tree item should be able to show at least:
 - evidence, diagnostics, and ambiguity summaries,
 - child subtree candidates when available.
 
-The right pane lower notification area should show candidate-resolution messages such as selected candidate details, filtered candidate counts, empty-result notices, and subtree traversal limits.
+The selected candidate pane should show evidence, diagnostics, ambiguities, matched paths, and selected bytes. The candidate pane notification area should show candidate-resolution messages such as filtered candidate counts, empty-result notices, and subtree traversal limits.
 
 ### Viewer Flow
 
 The first viewer milestone should support this flow:
 
-1. Load DER bytes from a file or clipboard HEX.
-2. Parse the input with PkiStudioJS through the adapter.
-3. Render the input bytes as formatted hex in the left pane.
+1. Load DER bytes from the embedded read-only PkiStudioJS viewer's `Load` menu.
+2. Read the loaded document bytes from the viewer.
+3. Parse the input with PkiStudioJS through the adapter.
 4. Run `createPkiCandidateReport()` with subtree reports enabled.
 5. Render root and subtree candidates in the right pane tree.
 6. Append parse, match, report, warning, and error events to the bottom API log.
@@ -419,6 +420,8 @@ Recommended initial profiles:
 - PKCS#10 CertificationRequest,
 - SubjectPublicKeyInfo,
 - RSAPublicKey,
+- DSA-Sig-Value,
+- ECDSA-Sig-Value,
 - SignatureValue,
 - PrivateKeyInfo / PKCS#8,
 - CMS ContentInfo,
@@ -543,7 +546,7 @@ It does not try to magically identify one unique ASN.1 definition from DER bytes
 6. Add recursive matching for encapsulated BIT STRING and OCTET STRING values.
 7. Add annotated tree generation.
 8. Add an agent-friendly JSON report format.
-9. Add a standalone viewer app for loading DER input, inspecting hex bytes, viewing candidate trees, and checking API logs.
+9. Add a standalone viewer app for loading DER input, inspecting the ASN.1 tree in PkiStudioJS, viewing candidate reports, and checking API logs.
 
 ## Open Design Questions
 

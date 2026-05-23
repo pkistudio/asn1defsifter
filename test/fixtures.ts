@@ -12,8 +12,8 @@ export function context(tagNumber: number, children: TlvNode[] = [], constructed
   return { tagClass: 'context', tagNumber, constructed, children };
 }
 
-export function integer(): TlvNode {
-  return { tagClass: 'universal', tagNumber: 2, constructed: false, tagName: 'INTEGER', valueBytes: new Uint8Array([1]) };
+export function integer(valueBytes = new Uint8Array([1])): TlvNode {
+  return { tagClass: 'universal', tagNumber: 2, constructed: false, tagName: 'INTEGER', valueBytes };
 }
 
 export function oid(value: string): TlvNode {

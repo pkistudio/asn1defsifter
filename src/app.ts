@@ -1,4 +1,6 @@
 import './styles.css';
+import PkiStudio from '@pkistudio/pkistudiojs/viewer';
+import PkiStudioOidResolver from '@pkistudio/pkistudiojs/oid-resolver';
 import { clampScore, confidenceFromScore, createPkiCandidateReport, type Candidate, type CandidateConfidence, type CandidateReport, type CandidateReportRoot, type CandidateReportSubtree, type TlvNode } from './core/index.js';
 
 type ViewerRoot = DocumentFragment | Element;
@@ -8,6 +10,10 @@ export type AppTheme = 'light' | 'dark';
 export type Asn1DefinitionSifterAppOptions = {
   mount?: string | Element;
   theme?: AppTheme;
+  viewer?: {
+    oidResolver?: PkiStudioOidResolverApi | ((oid: string) => string);
+    newWindowUrl?: string;
+  };
 };
 
 export type Asn1DefinitionSifterAppInstance = {
@@ -18,21 +24,47 @@ export type Asn1DefinitionSifterAppInstance = {
   close: () => void;
 };
 
-type LogLevel = 'info' | 'warning' | 'error';
+type LogLevel = 'info' | 'success' | 'warning' | 'error';
 
 type LogEntry = {
-  id: string;
   level: LogLevel;
-  message: string;
+  label: string;
   detail?: string;
   timestamp: Date;
+};
+
+type PkiStudioViewerApi = {
+  version?: string;
+  init: (options: {
+    mount: string | Element;
+    oidResolver?: PkiStudioOidResolverApi | ((oid: string) => string);
+    oidNames?: Record<string, string>;
+    oidUrl?: string;
+    newWindowUrl?: string;
+    shadowRoot?: boolean;
+    fullscreen?: boolean;
+    editable?: boolean;
+  }) => PkiStudioViewerInstance;
+};
+
+type PkiStudioViewerInstance = {
+  close?: () => void;
+  getNodeBytes?: (nodeId: string) => Uint8Array;
+  loadBytes: (bytes: Uint8Array, notice?: string) => void;
+  root?: DocumentFragment | Element;
+  setEditable?: (editable: boolean) => void;
+};
+
+type PkiStudioOidResolverApi = {
+  names: Record<string, string>;
+  resolve: (oid: string) => string;
+  create: (extraNames?: Record<string, string>) => PkiStudioOidResolverApi;
 };
 
 type CandidateSelection = {
   candidate?: Candidate;
   context: string;
   bytes?: Uint8Array;
-  byteNotice: string;
   displayScore?: number;
   displayConfidence?: CandidateConfidence;
   hexOnly?: boolean;
@@ -46,7 +78,7 @@ type SubtreeDisplayNode = {
   children: SubtreeDisplayNode[];
 };
 
-const MAX_LOG_ENTRIES = 200;
+const MAX_LOG_ENTRIES = 80;
 const DEFAULT_HEX_SOURCE = 'clipboard.hex';
 
 declare global {
@@ -70,94 +102,95 @@ export function initAsn1DefinitionSifter(options: Asn1DefinitionSifterAppOptions
 
   app.innerHTML = `
     <main class="ads-shell" data-theme="${options.theme ?? 'light'}">
+      <nav class="ads-toolbar" aria-label="Application toolbar">
+        <strong>ASN.1 Definition Sifter</strong>
+        <button id="adsAboutButton" type="button">About</button>
+      </nav>
       <section class="ads-workspace" aria-label="ASN.1 Definition Sifter workspace">
-        <section class="ads-pane ads-input-pane" aria-label="Input bytes">
-          <nav class="ads-pane-menu" aria-label="Input actions">
-            <strong>Input</strong>
-            <div class="ads-menu-group">
-              <button id="adsLoadButton" type="button" aria-haspopup="menu" aria-expanded="false">Load</button>
-              <div id="adsLoadMenu" class="ads-submenu" role="menu" hidden>
-                <button id="adsLoadFileButton" type="button" role="menuitem">from File</button>
-                <button id="adsLoadClipboardHexButton" type="button" role="menuitem">from Clipboard as HEX</button>
-              </div>
-            </div>
-            <input id="adsFileInput" class="ads-hidden-input" type="file" accept=".ber,.cer,.crt,.der,.hex,.pem,application/octet-stream,application/pkix-cert" />
-          </nav>
-          <div class="ads-input-split">
-            <section class="ads-hex-section" aria-label="Loaded DER bytes">
-              <div id="adsHexView" class="ads-pane-content ads-hex-view">No DER input loaded.</div>
-              <div id="adsInputNotice" class="ads-notice" role="status">Load a DER file or paste hexadecimal DER from the clipboard.</div>
-            </section>
-            <section class="ads-hex-section" aria-label="Selected candidate bytes">
-              <div id="adsSelectedHexView" class="ads-pane-content ads-hex-view">No candidate selected.</div>
-              <div id="adsSelectedHexNotice" class="ads-notice" role="status">Select a candidate to inspect the matching DER bytes.</div>
-            </section>
-          </div>
+        <section class="ads-viewer-pane" aria-label="Read-only PkiStudioJS viewer">
+          <div id="adsInputViewer" class="ads-input-viewer"></div>
         </section>
         <section class="ads-pane ads-candidate-pane" aria-label="Candidate results">
           <header class="ads-pane-menu">
             <strong>Candidates</strong>
-            <button id="adsClearButton" type="button">Clear</button>
           </header>
           <div class="ads-candidate-split">
             <div id="adsCandidateTree" class="ads-pane-content ads-tree" aria-label="Candidate tree">No candidate report yet.</div>
-            <section class="ads-selected-pane" aria-label="Selected candidate details">
-              <header class="ads-selected-header">
-                <strong>Selected Candidate</strong>
-                <span id="adsSelectedCandidateSummary">None</span>
-              </header>
-              <div id="adsCandidateDetail" class="ads-selected-detail">Select a candidate to inspect evidence, diagnostics, ambiguities, and matched paths.</div>
-            </section>
           </div>
           <div id="adsCandidateNotice" class="ads-notice" role="status">Candidate results will appear after input is loaded.</div>
         </section>
       </section>
+      <section class="ads-selected-pane" aria-label="Selected candidate details">
+        <header class="ads-selected-header">
+          <strong>Selected Candidate</strong>
+          <span id="adsSelectedCandidateSummary">None</span>
+        </header>
+        <div id="adsCandidateDetail" class="ads-selected-detail">Select a candidate to inspect evidence, diagnostics, ambiguities, matched paths, and bytes.</div>
+      </section>
+      <div id="adsApiLogResizer" class="ads-api-log-resizer" role="separator" aria-label="Resize API log" aria-orientation="horizontal" tabindex="0"></div>
       <section class="ads-log-pane" aria-label="API log">
         <header class="ads-log-menu">
-          <strong>API Log</strong>
           <button id="adsClearLogButton" type="button">Clear</button>
         </header>
-        <div id="adsApiLog" class="ads-api-log" aria-live="polite"></div>
+        <ol id="adsApiLog" class="ads-api-log" aria-live="polite"></ol>
       </section>
+      <dialog id="adsAboutDialog" class="ads-about-dialog">
+        <section class="ads-about-panel">
+          <div>
+            <div class="ads-about-name">ASN.1 Definition Sifter</div>
+            <div class="ads-about-module">@pkistudio/asn1defsifter</div>
+          </div>
+          <p>Rank ASN.1 definition candidates for DER and TLV fragments with explainable evidence.</p>
+          <form method="dialog">
+            <button id="adsCloseAboutButton" type="button">Close</button>
+          </form>
+        </section>
+      </dialog>
     </main>
   `;
 
-  const loadButton = getElement<HTMLButtonElement>(app, '#adsLoadButton');
-  const loadMenu = getElement<HTMLElement>(app, '#adsLoadMenu');
-  const loadFileButton = getElement<HTMLButtonElement>(app, '#adsLoadFileButton');
-  const loadClipboardHexButton = getElement<HTMLButtonElement>(app, '#adsLoadClipboardHexButton');
-  const fileInput = getElement<HTMLInputElement>(app, '#adsFileInput');
-  const clearButton = getElement<HTMLButtonElement>(app, '#adsClearButton');
+  const aboutButton = getElement<HTMLButtonElement>(app, '#adsAboutButton');
+  const aboutDialog = getElement<HTMLDialogElement>(app, '#adsAboutDialog');
+  const closeAboutButton = getElement<HTMLButtonElement>(app, '#adsCloseAboutButton');
   const clearLogButton = getElement<HTMLButtonElement>(app, '#adsClearLogButton');
-  const hexView = getElement<HTMLElement>(app, '#adsHexView');
-  const selectedHexView = getElement<HTMLElement>(app, '#adsSelectedHexView');
-  const inputNotice = getElement<HTMLElement>(app, '#adsInputNotice');
-  const selectedHexNotice = getElement<HTMLElement>(app, '#adsSelectedHexNotice');
+  const inputViewerMount = getElement<HTMLElement>(app, '#adsInputViewer');
   const candidateTree = getElement<HTMLElement>(app, '#adsCandidateTree');
   const selectedCandidateSummary = getElement<HTMLElement>(app, '#adsSelectedCandidateSummary');
   const candidateDetail = getElement<HTMLElement>(app, '#adsCandidateDetail');
   const candidateNotice = getElement<HTMLElement>(app, '#adsCandidateNotice');
   const apiLog = getElement<HTMLElement>(app, '#adsApiLog');
+  const apiLogResizer = getElement<HTMLElement>(app, '#adsApiLogResizer');
+  const inputViewer = (PkiStudio as PkiStudioViewerApi).init({
+    mount: inputViewerMount,
+    oidResolver: options.viewer?.oidResolver ?? (PkiStudioOidResolver as PkiStudioOidResolverApi),
+    newWindowUrl: options.viewer?.newWindowUrl ?? 'viewer.html',
+    editable: false
+  });
+  inputViewer.setEditable?.(false);
+  inputViewer.root?.addEventListener('click', () => window.setTimeout(() => disableInputViewerEditContextActions(inputViewer)));
+  inputViewer.root?.addEventListener('pointerover', () => disableInputViewerEditContextActions(inputViewer));
+  inputViewer.root?.addEventListener('focusin', () => disableInputViewerEditContextActions(inputViewer));
 
-  const addLog = (level: LogLevel, message: string, detail?: string): void => {
-    state.logs = [{ id: createId(), level, message, detail, timestamp: new Date() }, ...state.logs].slice(0, MAX_LOG_ENTRIES);
+  initializeApiLogResizer(getElement<HTMLElement>(app, '.ads-shell'), apiLogResizer);
+
+  const addLog = (level: LogLevel, label: string, detail?: string): void => {
+    state.logs.push({ level, label, detail, timestamp: new Date() });
+    if (state.logs.length > MAX_LOG_ENTRIES) state.logs.splice(0, state.logs.length - MAX_LOG_ENTRIES);
     renderLogs(apiLog, state.logs);
-  };
-
-  const setInputNotice = (message: string): void => {
-    inputNotice.textContent = message;
   };
 
   const setCandidateNotice = (message: string): void => {
     candidateNotice.textContent = message;
   };
 
-  const loadBytes = async (bytes: Uint8Array, sourceName = 'input.der'): Promise<void> => {
+  const loadBytes = async (bytes: Uint8Array, sourceName = 'input.der', renderInViewer = true): Promise<void> => {
     const startedAt = performance.now();
     state.bytes = bytes;
     state.sourceName = sourceName;
-    hexView.textContent = formatHexDump(bytes);
-    setInputNotice(`Loaded ${sourceName} (${bytes.byteLength} bytes).`);
+    if (renderInViewer) {
+      inputViewer.loadBytes(bytes, `Opened ${sourceName} in the read-only ASN.1 viewer.`);
+      inputViewer.setEditable?.(false);
+    }
     addLog('info', 'loadBytes', `${sourceName}: ${bytes.byteLength} bytes`);
     try {
       const report = await createPkiCandidateReport(bytes, {
@@ -173,19 +206,17 @@ export function initAsn1DefinitionSifter(options: Asn1DefinitionSifterAppOptions
       state.selectedSubtreeCandidates = new Map();
       renderCandidateTree(candidateTree, report, bytes, state.selectedRootCandidates, state.selectedSubtreeCandidates, (selection, selectedElement) => {
         renderSelectedCandidate(candidateDetail, selectedCandidateSummary, selection);
-        renderSelectedHex(selectedHexView, selectedHexNotice, selection);
         markSelectedTreeItem(candidateTree, selectedElement);
       });
       const rootCount = report.roots.length;
       const candidateCount = report.roots.reduce((sum, root) => sum + root.candidates.length, 0);
       const subtreeCount = report.roots.reduce((sum, root) => sum + (root.subtrees?.length ?? 0), 0);
       setCandidateNotice(`Resolved ${candidateCount} root candidate(s) across ${rootCount} root node(s); ${subtreeCount} subtree report(s).`);
-      addLog('info', 'createPkiCandidateReport', `Completed in ${formatDuration(startedAt)} with ${candidateCount} root candidate(s).`);
+      addLog('success', 'createPkiCandidateReport', `Completed in ${formatDuration(startedAt)} with ${candidateCount} root candidate(s).`);
     } catch (error) {
       state.report = null;
       candidateTree.textContent = 'No candidate report available.';
       renderSelectedCandidate(candidateDetail, selectedCandidateSummary);
-      renderSelectedHex(selectedHexView, selectedHexNotice);
       const message = getErrorMessage(error);
       setCandidateNotice(message);
       addLog('error', 'createPkiCandidateReport failed', message);
@@ -197,77 +228,59 @@ export function initAsn1DefinitionSifter(options: Asn1DefinitionSifterAppOptions
     await loadBytes(bytes, sourceName);
   };
 
-  const clear = (): void => {
+  const resetCandidateState = (detail: string): void => {
     state.report = null;
     state.sourceName = null;
     state.bytes = null;
     state.selectedRootCandidates = new Map();
     state.selectedSubtreeCandidates = new Map();
-    hexView.textContent = 'No DER input loaded.';
-    selectedHexView.textContent = 'No candidate selected.';
     candidateTree.textContent = 'No candidate report yet.';
     renderSelectedCandidate(candidateDetail, selectedCandidateSummary);
-    renderSelectedHex(selectedHexView, selectedHexNotice);
-    setInputNotice('Load a DER file or paste hexadecimal DER from the clipboard.');
     setCandidateNotice('Candidate results will appear after input is loaded.');
-    addLog('info', 'clear', 'Cleared input and candidate report.');
+    addLog('success', 'PkiStudioJS.viewer.close', detail);
   };
 
   const close = (): void => {
+    document.removeEventListener('click', handleDocumentClick);
+    viewerObserver.disconnect();
+    inputViewer.close?.();
     app.innerHTML = '';
   };
 
-  loadButton.addEventListener('click', () => {
-    const expanded = loadButton.getAttribute('aria-expanded') === 'true';
-    loadButton.setAttribute('aria-expanded', expanded ? 'false' : 'true');
-    loadMenu.hidden = expanded;
-  });
-
-  loadFileButton.addEventListener('click', () => {
-    loadMenu.hidden = true;
-    loadButton.setAttribute('aria-expanded', 'false');
-    fileInput.click();
-  });
-
-  loadClipboardHexButton.addEventListener('click', async () => {
-    loadMenu.hidden = true;
-    loadButton.setAttribute('aria-expanded', 'false');
-    try {
-      const text = await navigator.clipboard.readText();
-      await loadHex(text, DEFAULT_HEX_SOURCE);
-    } catch (error) {
-      const message = getErrorMessage(error);
-      setInputNotice(message);
-      addLog('error', 'from Clipboard as HEX failed', message);
+  aboutButton.addEventListener('click', () => {
+    if (typeof aboutDialog.showModal === 'function') {
+      aboutDialog.showModal();
+    } else {
+      aboutDialog.setAttribute('open', '');
     }
   });
 
-  fileInput.addEventListener('change', async () => {
-    const file = fileInput.files?.[0];
-    fileInput.value = '';
-    if (!file) return;
-    try {
-      const bytes = new Uint8Array(await file.arrayBuffer());
-      await loadBytes(bytes, file.name);
-    } catch (error) {
-      const message = getErrorMessage(error);
-      setInputNotice(message);
-      addLog('error', 'from File failed', message);
-    }
-  });
+  closeAboutButton.addEventListener('click', () => aboutDialog.close());
 
-  clearButton.addEventListener('click', clear);
   clearLogButton.addEventListener('click', () => {
     state.logs = [];
     renderLogs(apiLog, state.logs);
   });
-  document.addEventListener('click', (event) => {
+  const handleDocumentClick = (event: MouseEvent): void => {
     if (!app.contains(event.target as Node)) return;
     if (!(event.target as HTMLElement).closest('.ads-tree-alternatives')) closeAlternativeMenus();
-    if (event.target === loadButton || loadMenu.contains(event.target as Node)) return;
-    loadMenu.hidden = true;
-    loadButton.setAttribute('aria-expanded', 'false');
-  });
+  };
+  document.addEventListener('click', handleDocumentClick);
+
+  const synchronizeFromInputViewer = (): void => {
+    if (!inputViewer.getNodeBytes) return;
+    let bytes: Uint8Array;
+    try {
+      bytes = getInputViewerDocumentBytes(inputViewer);
+    } catch {
+      if (state.bytes && isInputViewerEmpty(inputViewer)) resetCandidateState('Cleared candidate report after the viewer was closed.');
+      return;
+    }
+    if (state.bytes && bytesEqual(state.bytes, bytes)) return;
+    void loadBytes(bytes, 'PkiStudioJS viewer', false);
+  };
+  const viewerObserver = new MutationObserver(() => window.setTimeout(synchronizeFromInputViewer));
+  if (inputViewer.root) viewerObserver.observe(inputViewer.root, { childList: true, subtree: true, characterData: true });
 
   addLog('info', 'initAsn1DefinitionSifter', 'Viewer initialized.');
 
@@ -615,7 +628,6 @@ function createRootSelection(candidate: Candidate, root: CandidateReportRoot, so
     candidate,
     context: `Root ${root.index}`,
     bytes: root.index === 0 ? sourceBytes : getNodeBytes(root.node),
-    byteNotice: `Root ${root.index} bytes for ${formatCandidateName(candidate)}.`,
     displayScore,
     displayConfidence: displayScore === undefined ? undefined : confidenceFromScore(displayScore)
   };
@@ -626,7 +638,6 @@ function createSubtreeSelection(candidate: Candidate, subtree: CandidateReportSu
     candidate,
     context: `Subtree ${subtree.path}`,
     bytes: getNodeBytes(subtree.node),
-    byteNotice: `Subtree ${subtree.path} bytes for ${formatCandidateName(candidate)}.`,
     displayScore,
     displayConfidence: displayScore === undefined ? undefined : confidenceFromScore(displayScore)
   };
@@ -637,7 +648,6 @@ function createHexOnlySelection(subtree: CandidateReportSubtree): CandidateSelec
   return {
     context: `Subtree ${subtree.path}`,
     bytes,
-    byteNotice: `Raw ${subtree.features.tagName} bytes for ${subtree.path}.`,
     hexOnly: true,
     hexSummary: formatHexOnlyLabel(subtree)
   };
@@ -647,13 +657,14 @@ function renderSelectedCandidate(container: HTMLElement, summary: HTMLElement, s
   container.innerHTML = '';
   if (!selection) {
     summary.textContent = 'None';
-    container.textContent = 'Select a candidate to inspect evidence, diagnostics, ambiguities, and matched paths.';
+    container.textContent = 'Select a candidate to inspect evidence, diagnostics, ambiguities, matched paths, and bytes.';
     return;
   }
   const { candidate, context } = selection;
   if (!candidate) {
     summary.textContent = `${context} · ${selection.hexSummary ?? 'HEX data'}`;
     container.append(createKeyValue('Binary data', 'No ASN.1 type candidate matched this value. The item is shown as raw hexadecimal bytes.'));
+    container.append(createKeyValue('Selected bytes', formatSelectedBytes(selection)));
     return;
   }
   const displayScore = selection.displayScore ?? candidate.score;
@@ -663,21 +674,18 @@ function renderSelectedCandidate(container: HTMLElement, summary: HTMLElement, s
   container.append(createKeyValue('Diagnostics', candidate.diagnostics.slice(0, 8).map((diagnostic) => `${diagnostic.severity}: ${diagnostic.message}`).join('\n') || 'No diagnostics.'));
   container.append(createKeyValue('Ambiguities', candidate.ambiguities.slice(0, 8).join('\n') || 'No ambiguities.'));
   container.append(createKeyValue('Matched paths', candidate.matchedPaths.slice(0, 12).map((path) => `${path.nodePath} -> ${path.schemaPath}`).join('\n') || 'No matched paths.'));
+  container.append(createKeyValue('Selected bytes', formatSelectedBytes(selection)));
 }
 
-function renderSelectedHex(container: HTMLElement, notice: HTMLElement, selection?: CandidateSelection): void {
-  if (!selection) {
-    container.textContent = 'No candidate selected.';
-    notice.textContent = 'Select a candidate to inspect the matching DER bytes.';
-    return;
-  }
+function formatSelectedBytes(selection: CandidateSelection): string {
   if (!selection.bytes || selection.bytes.length === 0) {
-    container.textContent = 'No encoded bytes available for the selected candidate.';
-    notice.textContent = `${selection.context}: encoded bytes are not available from the parser output.`;
-    return;
+    return `${selection.context}: encoded bytes are not available from the parser output.`;
   }
-  container.textContent = formatHexDump(selection.bytes);
-  notice.textContent = `${selection.byteNotice} ${selection.bytes.byteLength} byte(s).`;
+  return bytesToCompactHex(selection.bytes);
+}
+
+function bytesToCompactHex(bytes: Uint8Array): string {
+  return Array.from(bytes, (byte) => byte.toString(16).padStart(2, '0')).join('');
 }
 
 function createSummary(label: string, note: string, options: { hasChildren: boolean }): HTMLElement {
@@ -748,35 +756,31 @@ function createKeyValue(label: string, value: string): HTMLElement {
 
 function renderLogs(container: HTMLElement, logs: LogEntry[]): void {
   container.innerHTML = '';
-  if (logs.length === 0) {
-    container.textContent = 'No API log entries.';
-    return;
-  }
   for (const log of logs) {
-    const row = document.createElement('div');
-    row.className = `ads-log-entry ads-log-${log.level}`;
-    const timestamp = document.createElement('span');
-    timestamp.textContent = log.timestamp.toLocaleTimeString();
-    const message = document.createElement('strong');
-    message.textContent = log.message;
+    const row = document.createElement('li');
+    row.className = `ads-api-log-entry ${log.level}`;
+
+    const timestamp = document.createElement('time');
+    timestamp.dateTime = log.timestamp.toISOString();
+    timestamp.textContent = formatLogTimestamp(log.timestamp);
+
+    const label = document.createElement('span');
+    label.className = 'ads-api-log-operation';
+    label.textContent = log.label;
+
     const detail = document.createElement('span');
+    detail.className = 'ads-api-log-detail';
     detail.textContent = log.detail ?? '';
-    row.append(timestamp, message, detail);
+
+    row.append(timestamp, label, detail);
     container.append(row);
   }
+  container.scrollTop = container.scrollHeight;
 }
 
-function formatHexDump(bytes: Uint8Array): string {
-  if (bytes.length === 0) return '(empty input)';
-  const rows: string[] = [];
-  for (let offset = 0; offset < bytes.length; offset += 16) {
-    const chunk = bytes.slice(offset, offset + 16);
-    const address = offset.toString(16).padStart(8, '0');
-    const hex = Array.from(chunk, (byte) => byte.toString(16).padStart(2, '0')).join(' ').padEnd(47, ' ');
-    const ascii = Array.from(chunk, (byte) => (byte >= 32 && byte <= 126 ? String.fromCharCode(byte) : '.')).join('');
-    rows.push(`${address}  ${hex}  ${ascii}`);
-  }
-  return rows.join('\n');
+function formatLogTimestamp(date: Date): string {
+  const pad = (value: number, length = 2): string => String(value).padStart(length, '0');
+  return `${date.getFullYear()}/${pad(date.getMonth() + 1)}/${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}.${pad(date.getMilliseconds(), 3)}`;
 }
 
 function formatHexOnlyLabel(subtree: CandidateReportSubtree): string {
@@ -849,6 +853,27 @@ function concatBytes(...parts: Uint8Array[]): Uint8Array {
   return bytes;
 }
 
+function getInputViewerDocumentBytes(viewer: PkiStudioViewerInstance): Uint8Array {
+  if (!viewer.getNodeBytes || !viewer.root) throw new Error('PkiStudioJS viewer bytes are not available.');
+  const rootIds = Array.from(viewer.root.querySelectorAll<HTMLElement>('.tree > details.node > summary .icon[data-node-id]'), (element) => element.dataset.nodeId).filter((nodeId): nodeId is string => Boolean(nodeId));
+  if (rootIds.length === 0) return viewer.getNodeBytes('1');
+  return concatBytes(...rootIds.map((nodeId) => viewer.getNodeBytes?.(nodeId) ?? new Uint8Array()));
+}
+
+function isInputViewerEmpty(viewer: PkiStudioViewerInstance): boolean {
+  if (!viewer.root) return true;
+  return Boolean(viewer.root.querySelector('.viewer.empty'));
+}
+
+function disableInputViewerEditContextActions(viewer: PkiStudioViewerInstance): void {
+  if (!viewer.root) return;
+  const allowedActions = new Set(['send-to', 'send-new-window', 'send-new-window-extracted', 'copy-tree', 'copy-hex']);
+  for (const button of viewer.root.querySelectorAll<HTMLButtonElement>('button[data-node-action]')) {
+    const action = button.dataset.nodeAction ?? '';
+    if (!allowedActions.has(action)) button.disabled = true;
+  }
+}
+
 function hexToBytes(text: string): Uint8Array {
   const normalized = text.replace(/(?:0x|[^0-9a-fA-F])/g, '');
   if (normalized.length === 0) throw new Error('Clipboard does not contain hexadecimal input.');
@@ -858,6 +883,14 @@ function hexToBytes(text: string): Uint8Array {
     bytes[index] = Number.parseInt(normalized.slice(index * 2, index * 2 + 2), 16);
   }
   return bytes;
+}
+
+function bytesEqual(left: Uint8Array, right: Uint8Array): boolean {
+  if (left.byteLength !== right.byteLength) return false;
+  for (let index = 0; index < left.byteLength; index += 1) {
+    if (left[index] !== right[index]) return false;
+  }
+  return true;
 }
 
 function formatCandidateName(candidate: Pick<Candidate, 'typeName' | 'moduleName'>): string {
@@ -893,10 +926,46 @@ function resolveMount(mount: string | Element): Element {
   return element;
 }
 
-function getErrorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
+function initializeApiLogResizer(root: HTMLElement, resizer: HTMLElement): void {
+  const minHeight = 86;
+  const minWorkspaceHeight = 220;
+  let startY = 0;
+  let startHeight = 0;
+
+  const resize = (event: PointerEvent): void => {
+    const nextHeight = clampNumber(startHeight - (event.clientY - startY), minHeight, getMaxApiLogHeight(root, minWorkspaceHeight, minHeight));
+    root.style.setProperty('--ads-api-log-height', `${nextHeight}px`);
+  };
+
+  const stopResize = (): void => {
+    root.classList.remove('ads-resizing-rows');
+    document.removeEventListener('pointermove', resize);
+    document.removeEventListener('pointerup', stopResize);
+  };
+
+  resizer.addEventListener('pointerdown', (event) => {
+    event.preventDefault();
+    startY = event.clientY;
+    const currentHeight = getComputedStyle(root).getPropertyValue('--ads-api-log-height').trim();
+    startHeight = Number.parseFloat(currentHeight) || 156;
+    root.classList.add('ads-resizing-rows');
+    document.addEventListener('pointermove', resize);
+    document.addEventListener('pointerup', stopResize);
+  });
 }
 
-function createId(): string {
-  return Math.random().toString(36).slice(2, 10);
+function getMaxApiLogHeight(root: HTMLElement, minWorkspaceHeight: number, minApiLogHeight: number): number {
+  const toolbarHeight = root.querySelector('.ads-toolbar')?.getBoundingClientRect().height ?? 0;
+  const selectedPaneMinHeight = 150;
+  const splitterHeight = root.querySelector('.ads-api-log-resizer')?.getBoundingClientRect().height ?? 6;
+  const availableHeight = root.getBoundingClientRect().height || window.innerHeight;
+  return Math.max(minApiLogHeight, Math.floor(availableHeight - toolbarHeight - splitterHeight - selectedPaneMinHeight - minWorkspaceHeight));
+}
+
+function clampNumber(value: number, min: number, max: number): number {
+  return Math.min(Math.max(value, min), max);
+}
+
+function getErrorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
 }

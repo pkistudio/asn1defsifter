@@ -5,6 +5,8 @@ import { identifyAsn1Document } from '../core/document.js';
 import { extractDerFeatures } from '../core/features.js';
 import type { Candidate, CandidateReport, CandidateReportOptions, CandidateReportSubtree, CandidateReportSummary, Diagnostic, DiagnosticSeverity, TlvNode } from '../core/types.js';
 
+const INTEGER_PAIR_SIGNATURE_TYPES = new Set(['DSA-Sig-Value', 'ECDSA-Sig-Value']);
+
 export async function createCandidateReport(input: unknown, options: CandidateReportOptions = {}): Promise<CandidateReport> {
   const nodes = await parseInputToTlvNodes(input, options.parseOptions);
   return createCandidateReportFromNodes(nodes, options);
@@ -26,12 +28,13 @@ export function createCandidateReportFromNodes(nodes: TlvNode | TlvNode[], optio
     roots: rootNodes.map((node, index) => {
       const matchReport = createNodeMatchReport(node, candidateOptions);
       const signatureValuePaths = collectSignatureValuePaths(matchReport.candidates);
+      const subjectPublicKeyPaths = collectSubjectPublicKeyPaths(matchReport.candidates);
       return {
         index,
         ...(options.includeNodes ? { node } : {}),
         ...matchReport,
         hypotheses: identifyAsn1Document(node, candidateOptions),
-        ...(options.includeSubtrees ? { subtrees: createSubtreeReports(node, candidateOptions, options, signatureValuePaths) } : {})
+        ...(options.includeSubtrees ? { subtrees: createSubtreeReports(node, candidateOptions, options, signatureValuePaths, subjectPublicKeyPaths) } : {})
       };
     })
   };
@@ -50,7 +53,7 @@ function createNodeMatchReport(node: TlvNode, candidateOptions: Parameters<typeo
   };
 }
 
-function createSubtreeReports(node: TlvNode, candidateOptions: Parameters<typeof findAsn1Candidates>[1], options: CandidateReportOptions, signatureValuePaths: Set<string>): CandidateReportSubtree[] {
+function createSubtreeReports(node: TlvNode, candidateOptions: Parameters<typeof findAsn1Candidates>[1], options: CandidateReportOptions, signatureValuePaths: Set<string>, subjectPublicKeyPaths: Set<string>): CandidateReportSubtree[] {
   const maxDepth = options.maxSubtreeDepth ?? 3;
   const maxReports = options.maxSubtreeReports ?? 20;
   const reports: CandidateReportSubtree[] = [];
@@ -59,7 +62,7 @@ function createSubtreeReports(node: TlvNode, candidateOptions: Parameters<typeof
       path,
       ...(options.includeNodes ? { node: child } : {}),
       ...createNodeMatchReport(child, candidateOptions)
-    }, signatureValuePaths);
+    }, signatureValuePaths, subjectPublicKeyPaths);
     return options.includeEmptySubtrees || report.candidates.length > 0 ? report : undefined;
   });
   return reports;
@@ -78,9 +81,24 @@ function collectSignatureValuePaths(candidates: Candidate[]): Set<string> {
   return paths;
 }
 
-function filterContextualSubtreeCandidates(report: CandidateReportSubtree, signatureValuePaths: Set<string>): CandidateReportSubtree {
+function collectSubjectPublicKeyPaths(candidates: Candidate[]): Set<string> {
+  const paths = new Set<string>();
+  for (const candidate of candidates) {
+    if (candidate.score < 0.8) continue;
+    for (const matchedPath of candidate.matchedPaths) {
+      if (matchedPath.schemaPath.endsWith('.subjectPublicKey')) paths.add(matchedPath.nodePath);
+    }
+  }
+  return paths;
+}
+
+function filterContextualSubtreeCandidates(report: CandidateReportSubtree, signatureValuePaths: Set<string>, subjectPublicKeyPaths: Set<string>): CandidateReportSubtree {
   if (signatureValuePaths.has(report.path)) return report;
-  const candidates = report.candidates.filter((candidate) => candidate.typeName !== 'SignatureValue');
+  const inSignatureValue = isDescendantOfAnyPath(report.path, signatureValuePaths);
+  const inSubjectPublicKey = isDescendantOfAnyPath(report.path, subjectPublicKeyPaths);
+  const candidates = report.candidates.filter((candidate) => candidate.typeName !== 'SignatureValue'
+    && !(inSignatureValue && candidate.typeName === 'RSAPublicKey')
+    && !(inSubjectPublicKey && INTEGER_PAIR_SIGNATURE_TYPES.has(candidate.typeName)));
   if (candidates.length === report.candidates.length) return report;
   const diagnostics = uniqueDiagnostics(candidates.flatMap((candidate) => candidate.diagnostics));
   const ambiguities = [...new Set(candidates.flatMap((candidate) => candidate.ambiguities))];
@@ -91,6 +109,13 @@ function filterContextualSubtreeCandidates(report: CandidateReportSubtree, signa
     ambiguities,
     summary: createSummary(candidates, diagnostics, ambiguities)
   };
+}
+
+function isDescendantOfAnyPath(path: string, ancestors: Set<string>): boolean {
+  for (const ancestor of ancestors) {
+    if (path.startsWith(`${ancestor}.`)) return true;
+  }
+  return false;
 }
 
 function visitSubtrees(node: TlvNode, path: string, depth: number, maxDepth: number, maxReports: number, reports: CandidateReportSubtree[], createReport: (node: TlvNode, path: string) => CandidateReportSubtree | undefined): void {

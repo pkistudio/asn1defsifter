@@ -38,6 +38,14 @@ RSAPublicKey ::= SEQUENCE {
   modulus INTEGER,
   publicExponent INTEGER
 }
+DSA-Sig-Value ::= SEQUENCE {
+  r INTEGER,
+  s INTEGER
+}
+ECDSA-Sig-Value ::= SEQUENCE {
+  r INTEGER,
+  s INTEGER
+}
 SignatureValue ::= BIT STRING
 Extension ::= SEQUENCE {
   extnID OBJECT IDENTIFIER,
