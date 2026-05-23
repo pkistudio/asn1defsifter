@@ -137,6 +137,9 @@ export interface CandidateReportOptions {
   maxResults?: number;
   parseOptions?: Record<string, unknown>;
   includeNodes?: boolean;
+  includeSubtrees?: boolean;
+  maxSubtreeDepth?: number;
+  maxSubtreeReports?: number;
 }
 
 export interface CandidateReportRoot {
@@ -146,6 +149,17 @@ export interface CandidateReportRoot {
   summary: CandidateReportSummary;
   candidates: Candidate[];
   hypotheses: DocumentHypothesis[];
+  diagnostics: Diagnostic[];
+  ambiguities: string[];
+  subtrees?: CandidateReportSubtree[];
+}
+
+export interface CandidateReportSubtree {
+  path: string;
+  node?: TlvNode;
+  features: TlvFeatures;
+  summary: CandidateReportSummary;
+  candidates: Candidate[];
   diagnostics: Diagnostic[];
   ambiguities: string[];
 }

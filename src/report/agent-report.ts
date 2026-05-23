@@ -3,7 +3,7 @@ import { createPkiComponentCorpus } from '../corpus/pki-components.js';
 import { findAsn1Candidates } from '../core/candidates.js';
 import { identifyAsn1Document } from '../core/document.js';
 import { extractDerFeatures } from '../core/features.js';
-import type { Candidate, CandidateReport, CandidateReportSummary, Diagnostic, DiagnosticSeverity, TlvNode, CandidateReportOptions } from '../core/types.js';
+import type { Candidate, CandidateReport, CandidateReportOptions, CandidateReportSubtree, CandidateReportSummary, Diagnostic, DiagnosticSeverity, SchemaCorpusInput, TlvNode } from '../core/types.js';
 
 export async function createCandidateReport(input: unknown, options: CandidateReportOptions = {}): Promise<CandidateReport> {
   const nodes = await parseInputToTlvNodes(input, options.parseOptions);
@@ -16,21 +16,51 @@ export function createCandidateReportFromNodes(nodes: TlvNode | TlvNode[], optio
   const rootNodes = Array.isArray(nodes) ? nodes : [nodes];
   return {
     roots: rootNodes.map((node, index) => {
-      const candidates = findAsn1Candidates(node, { schemaCorpus, maxResults });
-      const diagnostics = uniqueDiagnostics(candidates.flatMap((candidate) => candidate.diagnostics));
-      const ambiguities = [...new Set(candidates.flatMap((candidate) => candidate.ambiguities))];
+      const matchReport = createNodeMatchReport(node, schemaCorpus, maxResults);
       return {
         index,
         ...(options.includeNodes ? { node } : {}),
-        features: extractDerFeatures(node),
-        summary: createSummary(candidates, diagnostics, ambiguities),
-        candidates,
+        ...matchReport,
         hypotheses: identifyAsn1Document(node, { schemaCorpus, maxResults }),
-        diagnostics,
-        ambiguities
+        ...(options.includeSubtrees ? { subtrees: createSubtreeReports(node, schemaCorpus, maxResults, options) } : {})
       };
     })
   };
+}
+
+function createNodeMatchReport(node: TlvNode, schemaCorpus: SchemaCorpusInput, maxResults: number): Omit<CandidateReportSubtree, 'path' | 'node'> {
+  const candidates = findAsn1Candidates(node, { schemaCorpus, maxResults });
+  const diagnostics = uniqueDiagnostics(candidates.flatMap((candidate) => candidate.diagnostics));
+  const ambiguities = [...new Set(candidates.flatMap((candidate) => candidate.ambiguities))];
+  return {
+    features: extractDerFeatures(node),
+    summary: createSummary(candidates, diagnostics, ambiguities),
+    candidates,
+    diagnostics,
+    ambiguities
+  };
+}
+
+function createSubtreeReports(node: TlvNode, schemaCorpus: SchemaCorpusInput, maxResults: number, options: CandidateReportOptions): CandidateReportSubtree[] {
+  const maxDepth = options.maxSubtreeDepth ?? 3;
+  const maxReports = options.maxSubtreeReports ?? 20;
+  const reports: CandidateReportSubtree[] = [];
+  visitSubtrees(node, '$', 0, maxDepth, maxReports, reports, (child, path) => ({
+    path,
+    ...(options.includeNodes ? { node: child } : {}),
+    ...createNodeMatchReport(child, schemaCorpus, maxResults)
+  }));
+  return reports;
+}
+
+function visitSubtrees(node: TlvNode, path: string, depth: number, maxDepth: number, maxReports: number, reports: CandidateReportSubtree[], createReport: (node: TlvNode, path: string) => CandidateReportSubtree): void {
+  if (depth >= maxDepth || reports.length >= maxReports) return;
+  for (const [index, child] of (node.children ?? []).entries()) {
+    if (reports.length >= maxReports) return;
+    const childPath = `${path}.${index}`;
+    reports.push(createReport(child, childPath));
+    visitSubtrees(child, childPath, depth + 1, maxDepth, maxReports, reports, createReport);
+  }
 }
 
 function createSummary(candidates: Candidate[], diagnostics: Diagnostic[], ambiguities: string[]): CandidateReportSummary {

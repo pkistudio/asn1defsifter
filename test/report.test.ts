@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { createCandidateReport, createCandidateReportFromNodes } from '../src/core';
-import { nullNode, oid, sequence } from './fixtures';
+import { bitString, nullNode, oid, sequence } from './fixtures';
 
 describe('createCandidateReport', () => {
   it('creates an agent-friendly report from DER hex input', async () => {
@@ -50,5 +50,31 @@ describe('createCandidateReport', () => {
       confidence: 'high'
     });
     expect(report.roots[0].summary.bestCandidate?.typeName).toBe('AlgorithmIdentifier');
+  });
+
+  it('can include bounded candidate reports for subtree nodes', () => {
+    const node = sequence([sequence([oid('1.2.840.113549.1.1.1'), nullNode()]), bitString()]);
+    const report = createCandidateReportFromNodes(node, {
+      includeSubtrees: true,
+      maxSubtreeDepth: 2,
+      maxSubtreeReports: 3,
+      maxResults: 3
+    });
+
+    expect(report.roots[0].subtrees).toHaveLength(3);
+    expect(report.roots[0].subtrees?.[0]).toMatchObject({
+      path: '$.0',
+      summary: {
+        bestCandidate: {
+          typeName: 'AlgorithmIdentifier'
+        }
+      }
+    });
+    expect(report.roots[0].subtrees?.[1]).toMatchObject({
+      path: '$.0.0',
+      features: {
+        oidValues: ['1.2.840.113549.1.1.1']
+      }
+    });
   });
 });
