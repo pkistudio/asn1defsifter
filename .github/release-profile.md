@@ -15,7 +15,7 @@
   - `package.json`
   - `package-lock.json`
   - `README.md` (`Current version:`)
-- Version source: `package.json` is the source for the package version.
+- Version source: `package.json` version is injected into `__ASN1_DEFINITION_SIFTER_VERSION__`, the app About display, tag validation, and release metadata.
 - Install command: `npm ci`
 - Build command: `npm run build`
 - Verification commands:
@@ -33,7 +33,6 @@
 - npm publish command in workflow: `npm publish --provenance --access public`
 - npm publication requires explicit user approval.
 - GitHub Release requires explicit user approval.
-- GitHub Release title pattern: `<tag>` only, such as `v0.1.2`.
 - Stable published tags should have a GitHub Release marked as latest unless the user instructs otherwise.
 - WordPress post workflow: `.github/workflows/publish-release-to-wordpress.yml`
 - WordPress post title pattern: `ASN.1 Definition Sifter <tag> をリリースしました`
