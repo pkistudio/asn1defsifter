@@ -108,7 +108,7 @@ function matchSequence(node: TlvNode, fields: Asn1Field[], state: MatchState, sc
     if (!child) {
       if (field.optional || field.defaultValue !== undefined) {
         addEvidence(state, nodePath, `Field ${field.name} is absent and allowed by OPTIONAL or DEFAULT.`);
-        totalScore += 0.75;
+        totalScore += scoreAbsentAllowedField(field);
         scoreSlots += 1;
         continue;
       }
@@ -120,7 +120,7 @@ function matchSequence(node: TlvNode, fields: Asn1Field[], state: MatchState, sc
     const outcome = matchField(children, childIndex, field, state, schemaPath, nodePath);
     if (outcome.score === 0 && (field.optional || field.defaultValue !== undefined)) {
       addEvidence(state, `${schemaPath}.${field.name}`, `Field ${field.name} may be omitted.`);
-      totalScore += 0.65;
+      totalScore += scoreAbsentAllowedField(field);
       scoreSlots += 1;
       continue;
     }
@@ -184,11 +184,10 @@ function matchSet(node: TlvNode, fields: Asn1Field[], state: MatchState, schemaP
 
     if (field.optional || field.defaultValue !== undefined) {
       addEvidence(state, nodePath, `SET field ${field.name} is absent and allowed by OPTIONAL or DEFAULT.`);
-      totalScore += 0.75;
+      totalScore += scoreAbsentAllowedField(field);
       scoreSlots += 1;
       continue;
     }
-
     addDiagnostic(state, 'error', `${schemaPath}.${field.name}`, `Required SET field ${field.name} is missing.`);
     scoreSlots += 1;
   }
@@ -200,6 +199,10 @@ function matchSet(node: TlvNode, fields: Asn1Field[], state: MatchState, schemaP
   const fieldScore = scoreSlots === 0 ? 0.85 : totalScore / scoreSlots;
   const completenessPenalty = unusedChildIndexes.size > 0 ? 0.85 : 1;
   return (0.25 + 0.75 * fieldScore) * completenessPenalty;
+}
+
+function scoreAbsentAllowedField(field: Asn1Field): number {
+  return field.defaultValue !== undefined ? 1 : 0.75;
 }
 
 function matchChoice(node: TlvNode, alternatives: Asn1Field[], state: MatchState, schemaPath: string, nodePath: string): number {

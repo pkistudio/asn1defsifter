@@ -66,6 +66,29 @@ describe('createPkiComponentCorpus', () => {
     expect(candidates[0].typeName).toBe('ContentInfo');
   });
 
+  it('matches Extension when critical DEFAULT is omitted', () => {
+    const node = sequence([oid('2.5.29.14'), octetString()]);
+    const candidates = findAsn1Candidates(node, { schemaCorpus: createPkiComponentCorpus(), maxResults: 5 });
+
+    expect(candidates[0]).toMatchObject({
+      typeName: 'Extension',
+      moduleName: 'PkiComponents',
+      score: 1,
+      confidence: 'high'
+    });
+  });
+
+  it('matches Extensions with child extensions in data order', () => {
+    const node = sequence([sequence([oid('2.5.29.14'), octetString()])]);
+    const candidates = findAsn1Candidates(node, { schemaCorpus: createPkiComponentCorpus(), maxResults: 5 });
+
+    expect(candidates[0]).toMatchObject({
+      typeName: 'Extensions',
+      score: 1,
+      confidence: 'high'
+    });
+  });
+
   it('keeps SET OF containers available for PKI name fragments', () => {
     const node = set([sequence([oid('2.5.4.3'), utf8String('Example CA')])]);
     const candidates = findAsn1Candidates(node, { schemaCorpus: createPkiComponentCorpus(), maxResults: 5 });
