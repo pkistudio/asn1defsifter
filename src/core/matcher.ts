@@ -12,6 +12,7 @@ interface MatchState {
 interface ChildMatchOutcome {
   nextIndex: number;
   score: number;
+  branchState: MatchState;
 }
 
 export function matchType(node: TlvNode, type: Asn1Type, schema: Asn1SchemaModule, schemaPath: string, nodePath = '$'): MatchResult {
@@ -108,6 +109,7 @@ function matchSequence(node: TlvNode, fields: Asn1Field[], state: MatchState, sc
     if (!child) {
       if (field.optional || field.defaultValue !== undefined) {
         addEvidence(state, nodePath, `Field ${field.name} is absent and allowed by OPTIONAL or DEFAULT.`);
+        addDiagnostic(state, 'info', `${schemaPath}.${field.name}`, `Field ${field.name} is absent and allowed by OPTIONAL or DEFAULT.`);
         totalScore += scoreAbsentAllowedField(field);
         scoreSlots += 1;
         continue;
@@ -120,10 +122,12 @@ function matchSequence(node: TlvNode, fields: Asn1Field[], state: MatchState, sc
     const outcome = matchField(children, childIndex, field, state, schemaPath, nodePath);
     if (outcome.score === 0 && (field.optional || field.defaultValue !== undefined)) {
       addEvidence(state, `${schemaPath}.${field.name}`, `Field ${field.name} may be omitted.`);
+      addDiagnostic(state, 'info', `${schemaPath}.${field.name}`, `Field ${field.name} is absent and allowed by OPTIONAL or DEFAULT.`);
       totalScore += scoreAbsentAllowedField(field);
       scoreSlots += 1;
       continue;
     }
+    if (outcome.score === 0) mergeBranchState(state, outcome.branchState, true);
     totalScore += outcome.score;
     scoreSlots += 1;
     childIndex = outcome.nextIndex;
@@ -142,12 +146,14 @@ function matchField(children: TlvNode[], childIndex: number, field: Asn1Field, s
   const child = children[childIndex];
   const fieldSchemaPath = `${schemaPath}.${field.name}`;
   const fieldNodePath = `${nodePath}.${childIndex}`;
-  const score = matchTypeInternal(child, field.type, state, fieldSchemaPath, fieldNodePath);
+  const branchState = createBranchState(state.schema);
+  const score = matchTypeInternal(child, field.type, branchState, fieldSchemaPath, fieldNodePath);
   if (score > 0) {
+    mergeBranchState(state, branchState);
     addEvidence(state, fieldNodePath, `Field ${field.name} is compatible with the child node.`);
-    return { nextIndex: childIndex + 1, score };
+    return { nextIndex: childIndex + 1, score, branchState };
   }
-  return { nextIndex: childIndex, score };
+  return { nextIndex: childIndex, score, branchState };
 }
 
 function matchSet(node: TlvNode, fields: Asn1Field[], state: MatchState, schemaPath: string, nodePath: string): number {
@@ -184,6 +190,7 @@ function matchSet(node: TlvNode, fields: Asn1Field[], state: MatchState, schemaP
 
     if (field.optional || field.defaultValue !== undefined) {
       addEvidence(state, nodePath, `SET field ${field.name} is absent and allowed by OPTIONAL or DEFAULT.`);
+      addDiagnostic(state, 'info', `${schemaPath}.${field.name}`, `SET field ${field.name} is absent and allowed by OPTIONAL or DEFAULT.`);
       totalScore += scoreAbsentAllowedField(field);
       scoreSlots += 1;
       continue;
@@ -277,9 +284,9 @@ function createBranchState(schema: Asn1SchemaModule): MatchState {
   return { schema, evidence: [], diagnostics: [], ambiguities: [], matchedPaths: [] };
 }
 
-function mergeBranchState(state: MatchState, branchState: MatchState): void {
+function mergeBranchState(state: MatchState, branchState: MatchState, includeErrors = false): void {
   state.evidence.push(...branchState.evidence);
-  state.diagnostics.push(...branchState.diagnostics.filter((diagnostic) => diagnostic.severity !== 'error'));
+  state.diagnostics.push(...branchState.diagnostics.filter((diagnostic) => includeErrors || diagnostic.severity !== 'error'));
   state.ambiguities.push(...branchState.ambiguities);
   state.matchedPaths.push(...branchState.matchedPaths);
 }

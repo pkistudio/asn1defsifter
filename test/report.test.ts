@@ -29,7 +29,7 @@ describe('createCandidateReport', () => {
         confidence: 'high'
       },
       diagnosticCounts: {
-        info: 0,
+        info: expect.any(Number),
         warning: expect.any(Number),
         error: expect.any(Number)
       }

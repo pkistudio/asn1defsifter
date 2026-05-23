@@ -105,6 +105,13 @@ describe('createPkiComponentCorpus', () => {
       score: 1,
       confidence: 'high'
     });
+    expect(candidates[0].diagnostics.some((diagnostic) => diagnostic.severity === 'error')).toBe(false);
+    expect(candidates[0].diagnostics).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ severity: 'info', message: 'Field issuerUniqueID is absent and allowed by OPTIONAL or DEFAULT.' }),
+        expect.objectContaining({ severity: 'info', message: 'Field subjectUniqueID is absent and allowed by OPTIONAL or DEFAULT.' })
+      ])
+    );
   });
 
   it('keeps SET OF containers available for PKI name fragments', () => {
