@@ -95,7 +95,7 @@ Use `createCandidateReportFromNodes(nodes)` when a host already has neutral TLV 
 
 Each report root includes `summary`, `features`, `candidates`, `hypotheses`, aggregated `diagnostics`, and aggregated `ambiguities`.
 
-Pass `includeSubtrees: true` to add bounded candidate reports for child TLV nodes. Use `maxSubtreeDepth` and `maxSubtreeReports` to keep report size predictable.
+Pass `includeSubtrees: true` to add bounded candidate reports for child TLV nodes. Use `maxSubtreeDepth` and `maxSubtreeReports` to keep report size predictable. Subtree reports omit nodes with no candidates by default; pass `includeEmptySubtrees: true` when exhaustive child-node reporting is needed.
 
 ## Relationship To PkiStudio Projects
 

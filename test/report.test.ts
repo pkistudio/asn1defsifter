@@ -61,7 +61,7 @@ describe('createCandidateReport', () => {
       maxResults: 3
     });
 
-    expect(report.roots[0].subtrees).toHaveLength(3);
+    expect(report.roots[0].subtrees).toHaveLength(1);
     expect(report.roots[0].subtrees?.[0]).toMatchObject({
       path: '$.0',
       summary: {
@@ -70,6 +70,19 @@ describe('createCandidateReport', () => {
         }
       }
     });
+  });
+
+  it('can include empty subtree reports when requested', () => {
+    const node = sequence([sequence([oid('1.2.840.113549.1.1.1'), nullNode()]), bitString()]);
+    const report = createCandidateReportFromNodes(node, {
+      includeSubtrees: true,
+      includeEmptySubtrees: true,
+      maxSubtreeDepth: 2,
+      maxSubtreeReports: 3,
+      maxResults: 3
+    });
+
+    expect(report.roots[0].subtrees).toHaveLength(3);
     expect(report.roots[0].subtrees?.[1]).toMatchObject({
       path: '$.0.0',
       features: {

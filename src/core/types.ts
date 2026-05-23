@@ -144,6 +144,7 @@ export interface CandidateReportOptions {
   parseOptions?: Record<string, unknown>;
   includeNodes?: boolean;
   includeSubtrees?: boolean;
+  includeEmptySubtrees?: boolean;
   maxSubtreeDepth?: number;
   maxSubtreeReports?: number;
 }

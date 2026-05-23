@@ -53,20 +53,24 @@ function createSubtreeReports(node: TlvNode, candidateOptions: Parameters<typeof
   const maxDepth = options.maxSubtreeDepth ?? 3;
   const maxReports = options.maxSubtreeReports ?? 20;
   const reports: CandidateReportSubtree[] = [];
-  visitSubtrees(node, '$', 0, maxDepth, maxReports, reports, (child, path) => ({
-    path,
-    ...(options.includeNodes ? { node: child } : {}),
-    ...createNodeMatchReport(child, candidateOptions)
-  }));
+  visitSubtrees(node, '$', 0, maxDepth, maxReports, reports, (child, path) => {
+    const report = {
+      path,
+      ...(options.includeNodes ? { node: child } : {}),
+      ...createNodeMatchReport(child, candidateOptions)
+    };
+    return options.includeEmptySubtrees || report.candidates.length > 0 ? report : undefined;
+  });
   return reports;
 }
 
-function visitSubtrees(node: TlvNode, path: string, depth: number, maxDepth: number, maxReports: number, reports: CandidateReportSubtree[], createReport: (node: TlvNode, path: string) => CandidateReportSubtree): void {
+function visitSubtrees(node: TlvNode, path: string, depth: number, maxDepth: number, maxReports: number, reports: CandidateReportSubtree[], createReport: (node: TlvNode, path: string) => CandidateReportSubtree | undefined): void {
   if (depth >= maxDepth || reports.length >= maxReports) return;
   for (const [index, child] of (node.children ?? []).entries()) {
     if (reports.length >= maxReports) return;
     const childPath = `${path}.${index}`;
-    reports.push(createReport(child, childPath));
+    const report = createReport(child, childPath);
+    if (report) reports.push(report);
     visitSubtrees(child, childPath, depth + 1, maxDepth, maxReports, reports, createReport);
   }
 }
