@@ -24,6 +24,10 @@ export function bitString(): TlvNode {
   return { tagClass: 'universal', tagNumber: 3, constructed: false, tagName: 'BIT STRING', valueBytes: new Uint8Array([0]) };
 }
 
+export function octetString(): TlvNode {
+  return { tagClass: 'universal', tagNumber: 4, constructed: false, tagName: 'OCTET STRING', valueBytes: new Uint8Array([0]) };
+}
+
 export function utf8String(value: string): TlvNode {
   return { tagClass: 'universal', tagNumber: 12, constructed: false, tagName: 'UTF8String', value };
 }

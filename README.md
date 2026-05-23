@@ -13,6 +13,7 @@ Current version: 0.1.0
 - ASN.1 Schema Model matching through `@pkistudio/asn1instancebuilder` definitions.
 - Candidate ranking with numeric scores, confidence labels, evidence, diagnostics, ambiguity notes, and matched node/schema paths.
 - PkiStudioJS adapter for parsing supported ASN.1 inputs into resolver-ready TLV nodes.
+- Built-in PKI component corpus for common fragments such as `AlgorithmIdentifier`, `SubjectPublicKeyInfo`, `Certificate`, `CertificationRequest`, `PrivateKeyInfo`, and `ContentInfo`.
 - Document hypothesis helper with annotated tree output.
 
 ## Install
@@ -29,14 +30,9 @@ Package exports:
 ## Core API
 
 ```ts
-import { findAsn1Candidates, parseAsn1DefinitionCorpus, parseInputToTlvNodes } from '@pkistudio/asn1defsifter';
+import { createPkiComponentCorpus, findAsn1Candidates, parseInputToTlvNodes } from '@pkistudio/asn1defsifter';
 
-const corpus = parseAsn1DefinitionCorpus(`Example DEFINITIONS ::= BEGIN
-AlgorithmIdentifier ::= SEQUENCE {
-	algorithm OBJECT IDENTIFIER,
-	parameters NULL OPTIONAL
-}
-END`);
+const corpus = createPkiComponentCorpus();
 
 const [node] = await parseInputToTlvNodes('300d06092a864886f70d01010b0500', { format: 'hex' });
 const candidates = findAsn1Candidates(node, { schemaCorpus: corpus, maxResults: 5 });
@@ -53,6 +49,8 @@ Candidate results include:
 - `diagnostics` explaining mismatches or weaker matches.
 - `ambiguities` for structurally plausible alternatives.
 - `matchedPaths` connecting TLV node paths to schema paths.
+
+Use `parseAsn1DefinitionCorpus(source)` when you want to match against your own ASN.1 module definitions instead of the built-in PKI component corpus.
 
 ## Relationship To PkiStudio Projects
 
