@@ -1,5 +1,5 @@
 import './styles.css';
-import { createPkiCandidateReport, type Candidate, type CandidateReport, type CandidateReportRoot, type CandidateReportSubtree, type TlvNode } from './core/index.js';
+import { clampScore, confidenceFromScore, createPkiCandidateReport, type Candidate, type CandidateConfidence, type CandidateReport, type CandidateReportRoot, type CandidateReportSubtree, type TlvNode } from './core/index.js';
 
 type ViewerRoot = DocumentFragment | Element;
 
@@ -33,6 +33,8 @@ type CandidateSelection = {
   context: string;
   bytes?: Uint8Array;
   byteNotice: string;
+  displayScore?: number;
+  displayConfidence?: CandidateConfidence;
   hexOnly?: boolean;
   hexSummary?: string;
 };
@@ -287,6 +289,7 @@ if (typeof window !== 'undefined') {
 }
 
 function renderCandidateTree(container: HTMLElement, report: CandidateReport, sourceBytes: Uint8Array, selectedRootCandidates: Map<number, string>, selectedSubtreeCandidates: Map<string, string>, selectCandidate: (selection: CandidateSelection, selectedElement: HTMLElement) => void): void {
+  const openNodeKeys = collectOpenTreeNodeKeys(container);
   container.innerHTML = '';
   if (report.roots.length === 0) {
     container.textContent = 'No root TLV nodes were parsed.';
@@ -297,25 +300,33 @@ function renderCandidateTree(container: HTMLElement, report: CandidateReport, so
     const subtrees = buildSubtreeTree(root.subtrees ?? []);
     for (const candidate of getVisibleRootCandidates(root, selectedRootCandidates)) {
       const candidateNode = createRootCandidateNode(candidate, root, sourceBytes, subtrees, selectedRootCandidates, selectedSubtreeCandidates, () => renderCandidateTree(container, report, sourceBytes, selectedRootCandidates, selectedSubtreeCandidates, selectCandidate), selectCandidate);
-      firstSelection ??= { selection: createRootSelection(candidate, root, sourceBytes), selectedElement: getTreeSummary(candidateNode) };
+      firstSelection ??= { selection: createRootSelection(candidate, root, sourceBytes, calculateRootDisplayScore(candidate, subtrees, selectedSubtreeCandidates)), selectedElement: getTreeSummary(candidateNode) };
       container.append(candidateNode);
     }
-    if (root.candidates.length === 0) container.append(createEmptyRootNode(root, subtrees, selectedSubtreeCandidates, selectCandidate));
+    if (root.candidates.length === 0) container.append(createEmptyRootNode(root, subtrees, selectedSubtreeCandidates, () => renderCandidateTree(container, report, sourceBytes, selectedRootCandidates, selectedSubtreeCandidates, selectCandidate), selectCandidate));
   }
+  restoreOpenTreeNodeKeys(container, openNodeKeys);
   if (firstSelection) selectCandidate(firstSelection.selection, firstSelection.selectedElement);
 }
 
 function createRootCandidateNode(candidate: Candidate, root: CandidateReportRoot, sourceBytes: Uint8Array, subtrees: SubtreeDisplayNode[], selectedRootCandidates: Map<number, string>, selectedSubtreeCandidates: Map<string, string>, rerenderTree: () => void, selectCandidate: (selection: CandidateSelection, selectedElement: HTMLElement) => void): HTMLElement {
   const details = document.createElement('details');
   details.className = 'ads-tree-node ads-candidate-node';
-  const summary = createSummary(formatCandidateName(candidate), `Root ${root.index} · ${formatScore(candidate.score)} · ${candidate.confidence}`, {
+  const displayScore = calculateRootDisplayScore(candidate, subtrees, selectedSubtreeCandidates);
+  const displayConfidence = confidenceFromScore(displayScore);
+  const summary = createSummary(formatCandidateName(candidate), `Root ${root.index} · ${formatScore(displayScore)} · ${displayConfidence}`, {
     hasChildren: subtrees.length > 0
   });
-  bindSummarySelection(summary, () => selectCandidate(createRootSelection(candidate, root, sourceBytes), summary));
+  summary.dataset.treeKind = 'root';
+  summary.dataset.rootIndex = String(root.index);
+  summary.dataset.candidateKey = candidateKey(candidate);
+  bindSummarySelection(summary, () => selectCandidate(createRootSelection(candidate, root, sourceBytes, displayScore), summary));
   const icon = summary.querySelector<HTMLElement>('.ads-tree-icon');
   const alternatives = createRootAlternativeList(root, selectedRootCandidates, (alternative) => {
     selectedRootCandidates.set(root.index, candidateKey(alternative));
     rerenderTree();
+    const selectedSummary = findTreeSummary('root', String(root.index), candidateKey(alternative));
+    selectCandidate(createRootSelection(alternative, root, sourceBytes, calculateRootDisplayScore(alternative, subtrees, selectedSubtreeCandidates)), selectedSummary ?? summary);
   });
   if (alternatives.childElementCount > 0) {
     icon?.addEventListener('click', (event) => {
@@ -331,7 +342,7 @@ function createRootCandidateNode(candidate: Candidate, root: CandidateReportRoot
   if (subtrees.length > 0) {
     const list = document.createElement('div');
     list.className = 'ads-tree-children';
-    for (const subtree of subtrees) list.append(createSubtreeNode(subtree, selectedSubtreeCandidates, selectCandidate));
+    for (const subtree of subtrees) list.append(createSubtreeNode(subtree, selectedSubtreeCandidates, rerenderTree, selectCandidate));
     details.append(list);
   }
   return details;
@@ -347,7 +358,7 @@ function getVisibleRootCandidates(root: CandidateReportRoot, selectedRootCandida
   return candidates.filter((candidate) => scoresTie(candidate.score, bestScore));
 }
 
-function createEmptyRootNode(root: CandidateReportRoot, subtrees: SubtreeDisplayNode[], selectedSubtreeCandidates: Map<string, string>, selectCandidate: (selection: CandidateSelection, selectedElement: HTMLElement) => void): HTMLElement {
+function createEmptyRootNode(root: CandidateReportRoot, subtrees: SubtreeDisplayNode[], selectedSubtreeCandidates: Map<string, string>, rerenderTree: () => void, selectCandidate: (selection: CandidateSelection, selectedElement: HTMLElement) => void): HTMLElement {
   const details = document.createElement('details');
   details.className = 'ads-tree-node';
   details.open = true;
@@ -355,31 +366,35 @@ function createEmptyRootNode(root: CandidateReportRoot, subtrees: SubtreeDisplay
   if (subtrees.length > 0) {
     const list = document.createElement('div');
     list.className = 'ads-tree-children';
-    for (const subtree of subtrees) list.append(createSubtreeNode(subtree, selectedSubtreeCandidates, selectCandidate));
+    for (const subtree of subtrees) list.append(createSubtreeNode(subtree, selectedSubtreeCandidates, rerenderTree, selectCandidate));
     details.append(list);
   }
   return details;
 }
 
-function createSubtreeNode(node: SubtreeDisplayNode, selectedSubtreeCandidates: Map<string, string>, selectCandidate: (selection: CandidateSelection, selectedElement: HTMLElement) => void): HTMLElement {
+function createSubtreeNode(node: SubtreeDisplayNode, selectedSubtreeCandidates: Map<string, string>, rerenderTree: () => void, selectCandidate: (selection: CandidateSelection, selectedElement: HTMLElement) => void): HTMLElement {
   const { subtree } = node;
   const selectedCandidate = getSelectedSubtreeCandidate(subtree, selectedSubtreeCandidates);
   const details = document.createElement('details');
   details.className = 'ads-tree-node ads-subtree-node';
-  const summary = selectedCandidate ? createSummary(formatCandidateName(selectedCandidate), `${subtree.path} · ${formatScore(selectedCandidate.score)} · ${selectedCandidate.confidence}`, {
+  const displayScore = selectedCandidate ? calculateSubtreeDisplayScore(node, selectedSubtreeCandidates, selectedCandidate) : undefined;
+  const displayConfidence = displayScore === undefined ? undefined : confidenceFromScore(displayScore);
+  const summary = selectedCandidate ? createSummary(formatCandidateName(selectedCandidate), `${subtree.path} · ${formatScore(displayScore ?? selectedCandidate.score)} · ${displayConfidence ?? selectedCandidate.confidence}`, {
     hasChildren: node.children.length > 0
   }) : createSummary(formatHexOnlyLabel(subtree), `${subtree.path} · ${subtree.features.tagName} · ${formatByteCount(getBinaryPayloadBytes(subtree.node)?.byteLength ?? 0)}`, {
     hasChildren: node.children.length > 0
   });
   if (selectedCandidate) {
-    bindSummarySelection(summary, () => selectCandidate(createSubtreeSelection(selectedCandidate, subtree), summary));
+    summary.dataset.treeKind = 'subtree';
+    summary.dataset.path = subtree.path;
+    summary.dataset.candidateKey = candidateKey(selectedCandidate);
+    bindSummarySelection(summary, () => selectCandidate(createSubtreeSelection(selectedCandidate, subtree, displayScore), summary));
     const icon = summary.querySelector<HTMLElement>('.ads-tree-icon');
     const alternatives = createAlternativeList(subtree, selectedSubtreeCandidates, (candidate, selectedElement) => {
       selectedSubtreeCandidates.set(subtree.path, candidateKey(candidate));
-      updateSummary(summary, formatCandidateName(candidate), `${subtree.path} · ${formatScore(candidate.score)} · ${candidate.confidence}`);
-      updateAlternativeChecks(alternatives, candidate);
-      alternatives.hidden = true;
-      selectCandidate(createSubtreeSelection(candidate, subtree), selectedElement);
+      rerenderTree();
+      const selectedSummary = findTreeSummary('subtree', subtree.path, candidateKey(candidate));
+      selectCandidate(createSubtreeSelection(candidate, subtree, calculateSubtreeDisplayScore(node, selectedSubtreeCandidates, candidate)), selectedSummary ?? selectedElement);
     });
     icon?.addEventListener('click', (event) => {
       event.preventDefault();
@@ -395,7 +410,7 @@ function createSubtreeNode(node: SubtreeDisplayNode, selectedSubtreeCandidates: 
   details.append(summary);
   const list = document.createElement('div');
   list.className = 'ads-tree-children';
-  for (const child of node.children) list.append(createSubtreeNode(child, selectedSubtreeCandidates, selectCandidate));
+  for (const child of node.children) list.append(createSubtreeNode(child, selectedSubtreeCandidates, rerenderTree, selectCandidate));
   details.append(list);
   return details;
 }
@@ -524,6 +539,59 @@ function getSelectedSubtreeCandidate(subtree: CandidateReportSubtree, selectedSu
   return subtree.candidates.find((candidate) => candidateKey(candidate) === selectedKey) ?? sortCandidatesByScore(subtree.candidates)[0];
 }
 
+function calculateRootDisplayScore(candidate: Candidate, subtrees: SubtreeDisplayNode[], selectedSubtreeCandidates: Map<string, string>): number {
+  return calculateDisplayScore(candidate.score, collectChildDisplayScores(subtrees, selectedSubtreeCandidates));
+}
+
+function calculateSubtreeDisplayScore(node: SubtreeDisplayNode, selectedSubtreeCandidates: Map<string, string>, candidate = getSelectedSubtreeCandidate(node.subtree, selectedSubtreeCandidates)): number | undefined {
+  if (!candidate) return undefined;
+  return calculateDisplayScore(candidate.score, collectChildDisplayScores(node.children, selectedSubtreeCandidates));
+}
+
+function collectChildDisplayScores(nodes: SubtreeDisplayNode[], selectedSubtreeCandidates: Map<string, string>): number[] {
+  return nodes.flatMap((node) => {
+    const score = calculateSubtreeDisplayScore(node, selectedSubtreeCandidates);
+    return score === undefined ? [] : [score];
+  });
+}
+
+function calculateDisplayScore(baseScore: number, childScores: number[]): number {
+  if (childScores.length === 0) return baseScore;
+  const total = childScores.reduce((sum, score) => sum + score, baseScore);
+  return clampScore(total / (childScores.length + 1));
+}
+
+function findTreeSummary(kind: 'root' | 'subtree', pathOrIndex: string, key: string): HTMLElement | undefined {
+  for (const summary of document.querySelectorAll<HTMLElement>(`summary[data-tree-kind="${kind}"]`)) {
+    const sameTarget = kind === 'root' ? summary.dataset.rootIndex === pathOrIndex : summary.dataset.path === pathOrIndex;
+    if (sameTarget && summary.dataset.candidateKey === key) return summary;
+  }
+  return undefined;
+}
+
+function collectOpenTreeNodeKeys(container: HTMLElement): Set<string> {
+  const keys = new Set<string>();
+  for (const details of container.querySelectorAll<HTMLDetailsElement>('details[open]')) {
+    const summary = details.querySelector<HTMLElement>(':scope > summary[data-tree-kind]');
+    const key = summary ? openTreeNodeKey(summary) : undefined;
+    if (key) keys.add(key);
+  }
+  return keys;
+}
+
+function restoreOpenTreeNodeKeys(container: HTMLElement, keys: Set<string>): void {
+  for (const summary of container.querySelectorAll<HTMLElement>('summary[data-tree-kind]')) {
+    const details = summary.parentElement instanceof HTMLDetailsElement ? summary.parentElement : undefined;
+    if (details && keys.has(openTreeNodeKey(summary) ?? '')) details.open = true;
+  }
+}
+
+function openTreeNodeKey(summary: HTMLElement): string | undefined {
+  if (summary.dataset.treeKind === 'root' && summary.dataset.rootIndex !== undefined) return `root:${summary.dataset.rootIndex}`;
+  if (summary.dataset.treeKind === 'subtree' && summary.dataset.path) return `subtree:${summary.dataset.path}`;
+  return undefined;
+}
+
 function candidateKey(candidate: Candidate): string {
   return `${candidate.moduleName ?? ''}\u0000${candidate.typeName}`;
 }
@@ -536,37 +604,25 @@ function createCheckmark(checked: boolean): HTMLElement {
   return checkmark;
 }
 
-function updateSummary(summary: HTMLElement, label: string, note: string): void {
-  const labelElement = summary.querySelector<HTMLElement>('.ads-tree-label');
-  const noteElement = summary.querySelector<HTMLElement>('.ads-tree-note');
-  if (labelElement) labelElement.textContent = label;
-  if (noteElement) noteElement.textContent = note;
-}
-
-function updateAlternativeChecks(container: HTMLElement, selectedCandidate: Candidate): void {
-  const selectedKey = candidateKey(selectedCandidate);
-  for (const item of container.querySelectorAll<HTMLElement>('.ads-candidate-item')) {
-    const checkmark = item.querySelector<HTMLElement>('.ads-tree-checkmark');
-    if (checkmark) checkmark.textContent = item.dataset.candidateKey === selectedKey ? '✓' : '';
-    item.setAttribute('aria-checked', item.dataset.candidateKey === selectedKey ? 'true' : 'false');
-  }
-}
-
-function createRootSelection(candidate: Candidate, root: CandidateReportRoot, sourceBytes: Uint8Array): CandidateSelection {
+function createRootSelection(candidate: Candidate, root: CandidateReportRoot, sourceBytes: Uint8Array, displayScore?: number): CandidateSelection {
   return {
     candidate,
     context: `Root ${root.index}`,
     bytes: root.index === 0 ? sourceBytes : getNodeBytes(root.node),
-    byteNotice: `Root ${root.index} bytes for ${formatCandidateName(candidate)}.`
+    byteNotice: `Root ${root.index} bytes for ${formatCandidateName(candidate)}.`,
+    displayScore,
+    displayConfidence: displayScore === undefined ? undefined : confidenceFromScore(displayScore)
   };
 }
 
-function createSubtreeSelection(candidate: Candidate, subtree: CandidateReportSubtree): CandidateSelection {
+function createSubtreeSelection(candidate: Candidate, subtree: CandidateReportSubtree, displayScore?: number): CandidateSelection {
   return {
     candidate,
     context: `Subtree ${subtree.path}`,
     bytes: getNodeBytes(subtree.node),
-    byteNotice: `Subtree ${subtree.path} bytes for ${formatCandidateName(candidate)}.`
+    byteNotice: `Subtree ${subtree.path} bytes for ${formatCandidateName(candidate)}.`,
+    displayScore,
+    displayConfidence: displayScore === undefined ? undefined : confidenceFromScore(displayScore)
   };
 }
 
@@ -594,7 +650,9 @@ function renderSelectedCandidate(container: HTMLElement, summary: HTMLElement, s
     container.append(createKeyValue('Binary data', 'No ASN.1 type candidate matched this value. The item is shown as raw hexadecimal bytes.'));
     return;
   }
-  summary.textContent = `${context} · ${formatCandidateName(candidate)} · ${formatScore(candidate.score)} · ${candidate.confidence}`;
+  const displayScore = selection.displayScore ?? candidate.score;
+  const displayConfidence = selection.displayConfidence ?? candidate.confidence;
+  summary.textContent = `${context} · ${formatCandidateName(candidate)} · ${formatScore(displayScore)} · ${displayConfidence}`;
   container.append(createKeyValue('Evidence', candidate.evidence.slice(0, 8).join('\n') || 'No evidence.'));
   container.append(createKeyValue('Diagnostics', candidate.diagnostics.slice(0, 8).map((diagnostic) => `${diagnostic.severity}: ${diagnostic.message}`).join('\n') || 'No diagnostics.'));
   container.append(createKeyValue('Ambiguities', candidate.ambiguities.slice(0, 8).join('\n') || 'No ambiguities.'));
