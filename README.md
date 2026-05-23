@@ -6,6 +6,8 @@ It does not try to magically identify one globally unique ASN.1 definition from 
 
 Current version: 0.1.0
 
+Hosted viewer: https://pkistudio.github.io/asn1defsifter/
+
 ## Features
 
 - Neutral TLV node model for resolver core inputs.
@@ -137,6 +139,8 @@ Run the local viewer with:
 npm run dev
 ```
 
+The hosted viewer is deployed to GitHub Pages by the `Deploy GitHub Pages` workflow. It builds `index.html` and `viewer.html` with `npm run build:pages` and publishes the `pages-dist` artifact.
+
 ## Relationship To PkiStudio Projects
 
 PkiStudioJS remains the low-level DER/BER/PEM/base64/HEX parser, serializer, viewer, and DER re-encoder. ASN.1 Instance Builder remains the schema-aware definition parser, validator, and DER builder.
@@ -173,6 +177,12 @@ For package or release-related changes, also run:
 
 ```sh
 npm run pack:dry-run
+```
+
+Build the GitHub Pages viewer locally with:
+
+```sh
+npm run build:pages
 ```
 
 Publishing to npm is handled by the `Publish npm package` GitHub Actions workflow. Configure npm trusted publishing for this repository and workflow, create and push a `v<package version>` tag, then let the tag-triggered workflow publish the package, or run the workflow manually with the same tag. The workflow verifies that the tag matches `package.json`, runs the local verification commands, inspects the package contents, and publishes `@pkistudio/asn1defsifter` with npm provenance.
