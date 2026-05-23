@@ -52,6 +52,8 @@ Candidate results include:
 
 Use `parseAsn1DefinitionCorpus(source)` when you want to match against your own ASN.1 module definitions instead of the built-in PKI component corpus.
 
+Pass `minScore` when callers should suppress weak candidates and their diagnostics from candidate lists and reports.
+
 For agent or workbench integrations, `createCandidateReport()` wraps parsing, feature extraction, candidate ranking, and document hypotheses into one JSON-friendly result:
 
 ```ts

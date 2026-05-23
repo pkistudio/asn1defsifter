@@ -5,6 +5,7 @@ import type { Candidate, CandidateOptions, TlvNode } from './types.js';
 
 export function findAsn1Candidates(node: TlvNode, options: CandidateOptions): Candidate[] {
   const maxResults = options.maxResults ?? 20;
+  const minScore = options.minScore ?? Number.MIN_VALUE;
   return listSchemaTargets(options.schemaCorpus)
     .map(({ module, definition }) => {
       const result = matchType(node, definition.type, module, definition.name);
@@ -20,7 +21,7 @@ export function findAsn1Candidates(node: TlvNode, options: CandidateOptions): Ca
         matchedPaths: result.matchedPaths
       } satisfies Candidate;
     })
-    .filter((candidate) => candidate.score > 0)
+    .filter((candidate) => candidate.score > 0 && candidate.score >= minScore)
     .sort((left, right) => right.score - left.score || left.typeName.localeCompare(right.typeName))
     .slice(0, maxResults);
 }

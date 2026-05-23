@@ -81,6 +81,7 @@ export interface Candidate {
 export interface CandidateOptions {
   schemaCorpus: SchemaCorpusInput;
   maxResults?: number;
+  minScore?: number;
   context?: CandidateContext;
 }
 
@@ -135,6 +136,7 @@ export interface DocumentHypothesis {
 export interface CandidateReportOptions {
   schemaCorpus?: SchemaCorpusInput;
   maxResults?: number;
+  minScore?: number;
   parseOptions?: Record<string, unknown>;
   includeNodes?: boolean;
   includeSubtrees?: boolean;

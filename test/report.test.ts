@@ -77,4 +77,17 @@ describe('createCandidateReport', () => {
       }
     });
   });
+
+  it('applies minimum score filtering to root and subtree candidates', () => {
+    const node = sequence([sequence([oid('1.2.840.113549.1.1.1'), nullNode()]), bitString()]);
+    const report = createCandidateReportFromNodes(node, {
+      includeSubtrees: true,
+      maxSubtreeDepth: 1,
+      maxResults: 10,
+      minScore: 0.9
+    });
+
+    expect(report.roots[0].candidates.every((candidate) => candidate.score >= 0.9)).toBe(true);
+    expect(report.roots[0].subtrees?.[0].candidates.every((candidate) => candidate.score >= 0.9)).toBe(true);
+  });
 });

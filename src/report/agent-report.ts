@@ -13,23 +13,24 @@ export async function createCandidateReport(input: unknown, options: CandidateRe
 export function createCandidateReportFromNodes(nodes: TlvNode | TlvNode[], options: CandidateReportOptions = {}): CandidateReport {
   const schemaCorpus = options.schemaCorpus ?? createPkiComponentCorpus();
   const maxResults = options.maxResults ?? 10;
+  const minScore = options.minScore;
   const rootNodes = Array.isArray(nodes) ? nodes : [nodes];
   return {
     roots: rootNodes.map((node, index) => {
-      const matchReport = createNodeMatchReport(node, schemaCorpus, maxResults);
+      const matchReport = createNodeMatchReport(node, schemaCorpus, maxResults, minScore);
       return {
         index,
         ...(options.includeNodes ? { node } : {}),
         ...matchReport,
-        hypotheses: identifyAsn1Document(node, { schemaCorpus, maxResults }),
-        ...(options.includeSubtrees ? { subtrees: createSubtreeReports(node, schemaCorpus, maxResults, options) } : {})
+        hypotheses: identifyAsn1Document(node, { schemaCorpus, maxResults, minScore }),
+        ...(options.includeSubtrees ? { subtrees: createSubtreeReports(node, schemaCorpus, maxResults, minScore, options) } : {})
       };
     })
   };
 }
 
-function createNodeMatchReport(node: TlvNode, schemaCorpus: SchemaCorpusInput, maxResults: number): Omit<CandidateReportSubtree, 'path' | 'node'> {
-  const candidates = findAsn1Candidates(node, { schemaCorpus, maxResults });
+function createNodeMatchReport(node: TlvNode, schemaCorpus: SchemaCorpusInput, maxResults: number, minScore?: number): Omit<CandidateReportSubtree, 'path' | 'node'> {
+  const candidates = findAsn1Candidates(node, { schemaCorpus, maxResults, minScore });
   const diagnostics = uniqueDiagnostics(candidates.flatMap((candidate) => candidate.diagnostics));
   const ambiguities = [...new Set(candidates.flatMap((candidate) => candidate.ambiguities))];
   return {
@@ -41,14 +42,14 @@ function createNodeMatchReport(node: TlvNode, schemaCorpus: SchemaCorpusInput, m
   };
 }
 
-function createSubtreeReports(node: TlvNode, schemaCorpus: SchemaCorpusInput, maxResults: number, options: CandidateReportOptions): CandidateReportSubtree[] {
+function createSubtreeReports(node: TlvNode, schemaCorpus: SchemaCorpusInput, maxResults: number, minScore: number | undefined, options: CandidateReportOptions): CandidateReportSubtree[] {
   const maxDepth = options.maxSubtreeDepth ?? 3;
   const maxReports = options.maxSubtreeReports ?? 20;
   const reports: CandidateReportSubtree[] = [];
   visitSubtrees(node, '$', 0, maxDepth, maxReports, reports, (child, path) => ({
     path,
     ...(options.includeNodes ? { node: child } : {}),
-    ...createNodeMatchReport(child, schemaCorpus, maxResults)
+    ...createNodeMatchReport(child, schemaCorpus, maxResults, minScore)
   }));
   return reports;
 }

@@ -45,6 +45,13 @@ describe('findAsn1Candidates', () => {
     expect(candidates.find((candidate) => candidate.typeName === 'SubjectPublicKeyInfo')?.score ?? 0).toBeLessThan(candidates[0].score);
   });
 
+  it('can filter weak candidates with a minimum score', () => {
+    const node = sequence([utf8String('Alice')]);
+    const candidates = findAsn1Candidates(node, { schemaCorpus: corpus, minScore: 0.9 });
+
+    expect(candidates.map((candidate) => candidate.typeName)).toEqual(['Person']);
+  });
+
   it('matches SET fields without requiring schema order', () => {
     const node = set([oid('2.5.4.3'), utf8String('Example CA')]);
     const candidates = findAsn1Candidates(node, { schemaCorpus: setCorpus });
