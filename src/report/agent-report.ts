@@ -25,12 +25,13 @@ export function createCandidateReportFromNodes(nodes: TlvNode | TlvNode[], optio
   return {
     roots: rootNodes.map((node, index) => {
       const matchReport = createNodeMatchReport(node, candidateOptions);
+      const signatureValuePaths = collectSignatureValuePaths(matchReport.candidates);
       return {
         index,
         ...(options.includeNodes ? { node } : {}),
         ...matchReport,
         hypotheses: identifyAsn1Document(node, candidateOptions),
-        ...(options.includeSubtrees ? { subtrees: createSubtreeReports(node, candidateOptions, options) } : {})
+        ...(options.includeSubtrees ? { subtrees: createSubtreeReports(node, candidateOptions, options, signatureValuePaths) } : {})
       };
     })
   };
@@ -49,19 +50,47 @@ function createNodeMatchReport(node: TlvNode, candidateOptions: Parameters<typeo
   };
 }
 
-function createSubtreeReports(node: TlvNode, candidateOptions: Parameters<typeof findAsn1Candidates>[1], options: CandidateReportOptions): CandidateReportSubtree[] {
+function createSubtreeReports(node: TlvNode, candidateOptions: Parameters<typeof findAsn1Candidates>[1], options: CandidateReportOptions, signatureValuePaths: Set<string>): CandidateReportSubtree[] {
   const maxDepth = options.maxSubtreeDepth ?? 3;
   const maxReports = options.maxSubtreeReports ?? 20;
   const reports: CandidateReportSubtree[] = [];
   visitSubtrees(node, '$', 0, maxDepth, maxReports, reports, (child, path) => {
-    const report = {
+    const report = filterContextualSubtreeCandidates({
       path,
       ...(options.includeNodes ? { node: child } : {}),
       ...createNodeMatchReport(child, candidateOptions)
-    };
+    }, signatureValuePaths);
     return options.includeEmptySubtrees || report.candidates.length > 0 ? report : undefined;
   });
   return reports;
+}
+
+function collectSignatureValuePaths(candidates: Candidate[]): Set<string> {
+  const paths = new Set<string>();
+  for (const candidate of candidates) {
+    if ((candidate.typeName !== 'Certificate' && candidate.typeName !== 'CertificationRequest') || candidate.score < 0.8) continue;
+    for (const matchedPath of candidate.matchedPaths) {
+      if (matchedPath.schemaPath.endsWith('.signatureValue.SignatureValue') || matchedPath.schemaPath.endsWith('.signature.SignatureValue')) {
+        paths.add(matchedPath.nodePath);
+      }
+    }
+  }
+  return paths;
+}
+
+function filterContextualSubtreeCandidates(report: CandidateReportSubtree, signatureValuePaths: Set<string>): CandidateReportSubtree {
+  if (signatureValuePaths.has(report.path)) return report;
+  const candidates = report.candidates.filter((candidate) => candidate.typeName !== 'SignatureValue');
+  if (candidates.length === report.candidates.length) return report;
+  const diagnostics = uniqueDiagnostics(candidates.flatMap((candidate) => candidate.diagnostics));
+  const ambiguities = [...new Set(candidates.flatMap((candidate) => candidate.ambiguities))];
+  return {
+    ...report,
+    candidates,
+    diagnostics,
+    ambiguities,
+    summary: createSummary(candidates, diagnostics, ambiguities)
+  };
 }
 
 function visitSubtrees(node: TlvNode, path: string, depth: number, maxDepth: number, maxReports: number, reports: CandidateReportSubtree[], createReport: (node: TlvNode, path: string) => CandidateReportSubtree | undefined): void {

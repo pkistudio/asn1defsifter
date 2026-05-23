@@ -38,6 +38,7 @@ RSAPublicKey ::= SEQUENCE {
   modulus INTEGER,
   publicExponent INTEGER
 }
+SignatureValue ::= BIT STRING
 Extension ::= SEQUENCE {
   extnID OBJECT IDENTIFIER,
   critical BOOLEAN DEFAULT FALSE,
@@ -59,7 +60,7 @@ TBSCertificate ::= SEQUENCE {
 Certificate ::= SEQUENCE {
   tbsCertificate TBSCertificate,
   signatureAlgorithm AlgorithmIdentifier,
-  signatureValue BIT STRING
+  signatureValue SignatureValue
 }
 CertificationRequestInfo ::= SEQUENCE {
   version INTEGER,
@@ -70,7 +71,7 @@ CertificationRequestInfo ::= SEQUENCE {
 CertificationRequest ::= SEQUENCE {
   certificationRequestInfo CertificationRequestInfo,
   signatureAlgorithm AlgorithmIdentifier,
-  signature BIT STRING
+  signature SignatureValue
 }
 PrivateKeyInfo ::= SEQUENCE {
   version INTEGER,

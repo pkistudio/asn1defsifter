@@ -158,7 +158,7 @@ For each DER/TLV fragment, extract features such as:
 - explicit or implicit tagging patterns,
 - OPTIONAL/DEFAULT-compatible shape,
 - nested DER inside BIT STRING or OCTET STRING,
-- common PKI patterns such as AlgorithmIdentifier, Extension, Name, ContentInfo, SubjectPublicKeyInfo, and RSAPublicKey.
+- common PKI patterns such as AlgorithmIdentifier, Extension, Name, ContentInfo, SubjectPublicKeyInfo, RSAPublicKey, and SignatureValue.
 
 ### Candidate Matching
 
@@ -419,6 +419,7 @@ Recommended initial profiles:
 - PKCS#10 CertificationRequest,
 - SubjectPublicKeyInfo,
 - RSAPublicKey,
+- SignatureValue,
 - PrivateKeyInfo / PKCS#8,
 - CMS ContentInfo,
 - CMS SignedData,
