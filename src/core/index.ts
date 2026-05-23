@@ -9,6 +9,6 @@ export { describeNodeTag, getNodeTagName } from './tags.js';
 export { parseAsn1DefinitionCorpus } from '../adapters/asn1instancebuilder.js';
 export { parseInputToTlvNodes, pkistudioNodeToTlvNode } from '../adapters/pkistudiojs.js';
 export { createPkiComponentCorpus, pkiComponentDefinition } from '../corpus/pki-components.js';
-export { createCandidateReport } from '../report/agent-report.js';
+export { createCandidateReport, createCandidateReportFromNodes } from '../report/agent-report.js';
 export type { AnnotatedNode, Candidate, CandidateConfidence, CandidateContext, CandidateOptions, CandidateReport, CandidateReportOptions, CandidateReportRoot, Diagnostic, DiagnosticSeverity, DocumentHypothesis, EvidenceItem, MatchedPath, MatchResult, SchemaCandidateTarget, SchemaCorpus, SchemaCorpusInput, TlvFeatures, TlvNode, TlvTagClass } from './types.js';
 export type { Asn1Field, Asn1SchemaModule, Asn1Type, Asn1TypeDefinition } from './types.js';

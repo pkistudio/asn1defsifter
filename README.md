@@ -65,6 +65,8 @@ const report = await createCandidateReport('300d06092a864886f70d01010b0500', {
 console.log(report.roots[0].candidates[0]);
 ```
 
+Use `createCandidateReportFromNodes(nodes)` when a host already has neutral TLV nodes and should not parse the input again.
+
 ## Relationship To PkiStudio Projects
 
 PkiStudioJS remains the low-level DER/BER/PEM/base64/HEX parser, serializer, viewer, and DER re-encoder. ASN.1 Instance Builder remains the schema-aware definition parser, validator, and DER builder.
