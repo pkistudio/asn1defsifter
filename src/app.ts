@@ -57,11 +57,12 @@ declare global {
 
 export function initAsn1DefinitionSifter(options: Asn1DefinitionSifterAppOptions = {}): Asn1DefinitionSifterAppInstance {
   const app = resolveMount(options.mount ?? '#app');
-  const state: { report: CandidateReport | null; sourceName: string | null; bytes: Uint8Array | null; logs: LogEntry[]; selectedSubtreeCandidates: Map<string, string> } = {
+  const state: { report: CandidateReport | null; sourceName: string | null; bytes: Uint8Array | null; logs: LogEntry[]; selectedRootCandidates: Map<number, string>; selectedSubtreeCandidates: Map<string, string> } = {
     report: null,
     sourceName: null,
     bytes: null,
     logs: [],
+    selectedRootCandidates: new Map(),
     selectedSubtreeCandidates: new Map()
   };
 
@@ -166,8 +167,9 @@ export function initAsn1DefinitionSifter(options: Asn1DefinitionSifterAppOptions
         maxResults: 8
       });
       state.report = report;
+      state.selectedRootCandidates = new Map();
       state.selectedSubtreeCandidates = new Map();
-      renderCandidateTree(candidateTree, report, bytes, state.selectedSubtreeCandidates, (selection, selectedElement) => {
+      renderCandidateTree(candidateTree, report, bytes, state.selectedRootCandidates, state.selectedSubtreeCandidates, (selection, selectedElement) => {
         renderSelectedCandidate(candidateDetail, selectedCandidateSummary, selection);
         renderSelectedHex(selectedHexView, selectedHexNotice, selection);
         markSelectedTreeItem(candidateTree, selectedElement);
@@ -197,6 +199,7 @@ export function initAsn1DefinitionSifter(options: Asn1DefinitionSifterAppOptions
     state.report = null;
     state.sourceName = null;
     state.bytes = null;
+    state.selectedRootCandidates = new Map();
     state.selectedSubtreeCandidates = new Map();
     hexView.textContent = 'No DER input loaded.';
     selectedHexView.textContent = 'No candidate selected.';
@@ -283,7 +286,7 @@ if (typeof window !== 'undefined') {
   window.Asn1DefinitionSifter = { init: initAsn1DefinitionSifter };
 }
 
-function renderCandidateTree(container: HTMLElement, report: CandidateReport, sourceBytes: Uint8Array, selectedSubtreeCandidates: Map<string, string>, selectCandidate: (selection: CandidateSelection, selectedElement: HTMLElement) => void): void {
+function renderCandidateTree(container: HTMLElement, report: CandidateReport, sourceBytes: Uint8Array, selectedRootCandidates: Map<number, string>, selectedSubtreeCandidates: Map<string, string>, selectCandidate: (selection: CandidateSelection, selectedElement: HTMLElement) => void): void {
   container.innerHTML = '';
   if (report.roots.length === 0) {
     container.textContent = 'No root TLV nodes were parsed.';
@@ -292,8 +295,8 @@ function renderCandidateTree(container: HTMLElement, report: CandidateReport, so
   let firstSelection: { selection: CandidateSelection; selectedElement: HTMLElement } | undefined;
   for (const root of report.roots) {
     const subtrees = buildSubtreeTree(root.subtrees ?? []);
-    for (const candidate of sortCandidatesByScore(root.candidates)) {
-      const candidateNode = createRootCandidateNode(candidate, root, sourceBytes, subtrees, selectedSubtreeCandidates, selectCandidate);
+    for (const candidate of getVisibleRootCandidates(root, selectedRootCandidates)) {
+      const candidateNode = createRootCandidateNode(candidate, root, sourceBytes, subtrees, selectedRootCandidates, selectedSubtreeCandidates, () => renderCandidateTree(container, report, sourceBytes, selectedRootCandidates, selectedSubtreeCandidates, selectCandidate), selectCandidate);
       firstSelection ??= { selection: createRootSelection(candidate, root, sourceBytes), selectedElement: getTreeSummary(candidateNode) };
       container.append(candidateNode);
     }
@@ -302,13 +305,28 @@ function renderCandidateTree(container: HTMLElement, report: CandidateReport, so
   if (firstSelection) selectCandidate(firstSelection.selection, firstSelection.selectedElement);
 }
 
-function createRootCandidateNode(candidate: Candidate, root: CandidateReportRoot, sourceBytes: Uint8Array, subtrees: SubtreeDisplayNode[], selectedSubtreeCandidates: Map<string, string>, selectCandidate: (selection: CandidateSelection, selectedElement: HTMLElement) => void): HTMLElement {
+function createRootCandidateNode(candidate: Candidate, root: CandidateReportRoot, sourceBytes: Uint8Array, subtrees: SubtreeDisplayNode[], selectedRootCandidates: Map<number, string>, selectedSubtreeCandidates: Map<string, string>, rerenderTree: () => void, selectCandidate: (selection: CandidateSelection, selectedElement: HTMLElement) => void): HTMLElement {
   const details = document.createElement('details');
   details.className = 'ads-tree-node ads-candidate-node';
   const summary = createSummary(formatCandidateName(candidate), `Root ${root.index} · ${formatScore(candidate.score)} · ${candidate.confidence}`, {
     hasChildren: subtrees.length > 0
   });
   bindSummarySelection(summary, () => selectCandidate(createRootSelection(candidate, root, sourceBytes), summary));
+  const icon = summary.querySelector<HTMLElement>('.ads-tree-icon');
+  const alternatives = createRootAlternativeList(root, selectedRootCandidates, (alternative) => {
+    selectedRootCandidates.set(root.index, candidateKey(alternative));
+    rerenderTree();
+  });
+  if (alternatives.childElementCount > 0) {
+    icon?.addEventListener('click', (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      closeAlternativeMenus(alternatives);
+      const shouldShow = alternatives.hidden;
+      alternatives.hidden = !shouldShow;
+    });
+    summary.append(alternatives);
+  }
   details.append(summary);
   if (subtrees.length > 0) {
     const list = document.createElement('div');
@@ -317,6 +335,16 @@ function createRootCandidateNode(candidate: Candidate, root: CandidateReportRoot
     details.append(list);
   }
   return details;
+}
+
+function getVisibleRootCandidates(root: CandidateReportRoot, selectedRootCandidates: Map<number, string>): Candidate[] {
+  const selectedKey = selectedRootCandidates.get(root.index);
+  const selectedCandidate = root.candidates.find((candidate) => candidateKey(candidate) === selectedKey);
+  if (selectedCandidate) return [selectedCandidate];
+  const candidates = sortCandidatesByScore(root.candidates);
+  const bestScore = candidates[0]?.score;
+  if (bestScore === undefined) return [];
+  return candidates.filter((candidate) => scoresTie(candidate.score, bestScore));
 }
 
 function createEmptyRootNode(root: CandidateReportRoot, subtrees: SubtreeDisplayNode[], selectedSubtreeCandidates: Map<string, string>, selectCandidate: (selection: CandidateSelection, selectedElement: HTMLElement) => void): HTMLElement {
@@ -379,6 +407,34 @@ function createAlternativeList(subtree: CandidateReportSubtree, selectedSubtreeC
   list.hidden = true;
   for (const candidate of sortCandidatesByScore(subtree.candidates)) list.append(createCandidateNode(candidate, subtree, selectedSubtreeCandidates, selectAlternative));
   return list;
+}
+
+function createRootAlternativeList(root: CandidateReportRoot, selectedRootCandidates: Map<number, string>, selectAlternative: (candidate: Candidate) => void): HTMLElement {
+  const list = document.createElement('div');
+  list.className = 'ads-tree-alternatives';
+  list.setAttribute('role', 'menu');
+  list.hidden = true;
+  const visibleKeys = new Set(getVisibleRootCandidates(root, selectedRootCandidates).map(candidateKey));
+  for (const candidate of sortCandidatesByScore(root.candidates).filter((item) => !visibleKeys.has(candidateKey(item)))) {
+    list.append(createRootCandidateItem(candidate, selectAlternative));
+  }
+  return list;
+}
+
+function createRootCandidateItem(candidate: Candidate, selectAlternative: (candidate: Candidate) => void): HTMLElement {
+  const item = document.createElement('button');
+  item.className = 'ads-tree-item ads-candidate-item';
+  item.type = 'button';
+  item.setAttribute('role', 'menuitem');
+  item.dataset.candidateKey = candidateKey(candidate);
+  item.append(createTreeLabel(formatCandidateName(candidate)), createTreeNote(formatScore(candidate.score)));
+  item.prepend(createCheckmark(false));
+  item.addEventListener('click', (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    selectAlternative(candidate);
+  });
+  return item;
 }
 
 function createCandidateNode(candidate: Candidate, subtree: CandidateReportSubtree, selectedSubtreeCandidates: Map<string, string>, selectAlternative: (candidate: Candidate, selectedElement: HTMLElement) => void): HTMLElement {
@@ -750,6 +806,10 @@ function formatScore(score: number): string {
 
 function sortCandidatesByScore(candidates: Candidate[]): Candidate[] {
   return [...candidates].sort((left, right) => right.score - left.score || formatCandidateName(left).localeCompare(formatCandidateName(right)));
+}
+
+function scoresTie(left: number, right: number): boolean {
+  return Math.abs(left - right) < 1e-9;
 }
 
 function formatDuration(startedAt: number): string {
