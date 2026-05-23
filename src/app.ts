@@ -130,6 +130,25 @@ const EMBEDDED_VIEWER_SURFACE_STYLES = `
 .viewer {
   background: transparent !important;
 }
+
+.node-context-menu,
+.node-context-submenu {
+  border: 1px solid var(--panel-border) !important;
+  background: rgb(255 255 255 / 98%) !important;
+  box-shadow: 0 10px 28px rgb(15 23 42 / 28%) !important;
+}
+
+@media (prefers-color-scheme: dark) {
+  .node-context-menu,
+  .node-context-submenu {
+    background: rgb(37 43 52 / 98%) !important;
+  }
+}
+
+:host([data-pkistudio-theme="dark"]) .node-context-menu,
+:host([data-pkistudio-theme="dark"]) .node-context-submenu {
+  background: rgb(37 43 52 / 98%) !important;
+}
 `;
 
 declare global {
@@ -142,7 +161,7 @@ declare global {
 
 export function initAsn1DefinitionSifter(options: Asn1DefinitionSifterAppOptions = {}): Asn1DefinitionSifterAppInstance {
   const app = resolveMount(options.mount ?? '#app');
-  const state: { report: CandidateReport | null; sourceName: string | null; bytes: Uint8Array | null; logs: LogEntry[]; selectedRootCandidates: Map<number, string>; selectedSubtreeCandidates: Map<string, string> } = {
+  const state: { report: CandidateReport | null; sourceName: string | null; bytes: Uint8Array | null; logs: LogEntry[]; selectedRootCandidates: Map<number, string>; selectedSubtreeCandidates: Map<string, string>; selectedSelection?: CandidateSelection } = {
     report: null,
     sourceName: null,
     bytes: null,
@@ -158,7 +177,7 @@ export function initAsn1DefinitionSifter(options: Asn1DefinitionSifterAppOptions
         <button id="adsAboutButton" type="button">About</button>
       </nav>
       <section class="ads-workspace" aria-label="ASN.1 Definition Sifter workspace">
-        <section class="ads-viewer-pane" aria-label="Read-only PkiStudioJS viewer">
+        <section class="ads-viewer-pane" aria-label="PkiStudioJS viewer">
           <div id="adsInputViewer" class="ads-input-viewer"></div>
         </section>
         <div id="adsWorkspaceResizer" class="ads-workspace-resizer" role="separator" aria-label="Resize viewer and candidates" aria-orientation="vertical" tabindex="0"></div>
@@ -177,6 +196,7 @@ export function initAsn1DefinitionSifter(options: Asn1DefinitionSifterAppOptions
         <header class="ads-selected-header">
           <strong>Selected Candidate</strong>
           <span id="adsSelectedCandidateSummary">None</span>
+          <button id="adsCopySelectedCandidateButton" type="button" disabled>Copy</button>
         </header>
         <div id="adsCandidateDetail" class="ads-selected-detail">Select a candidate to inspect evidence, diagnostics, ambiguities, matched paths, and bytes.</div>
       </section>
@@ -210,6 +230,7 @@ export function initAsn1DefinitionSifter(options: Asn1DefinitionSifterAppOptions
   if (options.theme) inputViewerMount.setAttribute('data-pkistudio-theme', options.theme);
   const candidateTree = getElement<HTMLElement>(app, '#adsCandidateTree');
   const selectedCandidateSummary = getElement<HTMLElement>(app, '#adsSelectedCandidateSummary');
+  const copySelectedCandidateButton = getElement<HTMLButtonElement>(app, '#adsCopySelectedCandidateButton');
   const candidateDetail = getElement<HTMLElement>(app, '#adsCandidateDetail');
   const candidateNotice = getElement<HTMLElement>(app, '#adsCandidateNotice');
   const apiLog = getElement<HTMLElement>(app, '#adsApiLog');
@@ -222,13 +243,9 @@ export function initAsn1DefinitionSifter(options: Asn1DefinitionSifterAppOptions
     mount: inputViewerMount,
     oidResolver: options.viewer?.oidResolver ?? (PkiStudioOidResolver as PkiStudioOidResolverApi),
     newWindowUrl: options.viewer?.newWindowUrl ?? 'viewer.html',
-    editable: false
+    editable: true
   });
-  inputViewer.setEditable?.(false);
   applyEmbeddedViewerSurfaceStyles(inputViewer);
-  inputViewer.root?.addEventListener('click', () => window.setTimeout(() => disableInputViewerEditContextActions(inputViewer)));
-  inputViewer.root?.addEventListener('pointerover', () => disableInputViewerEditContextActions(inputViewer));
-  inputViewer.root?.addEventListener('focusin', () => disableInputViewerEditContextActions(inputViewer));
 
   const shell = getElement<HTMLElement>(app, '.ads-shell');
   initializeSelectedPaneResizer(shell, selectedPane, selectedPaneResizer);
@@ -241,22 +258,39 @@ export function initAsn1DefinitionSifter(options: Asn1DefinitionSifterAppOptions
     renderLogs(apiLog, state.logs);
   };
 
+  let lastViewerEditAction: string | undefined;
+  initializeInputViewerEditActionLogging(inputViewer, (action, label) => {
+    lastViewerEditAction = `${label} (${action})`;
+    addLog('info', 'PkiStudioJS.viewer.edit', lastViewerEditAction);
+  });
+
   const setCandidateNotice = (message: string): void => {
     candidateNotice.textContent = message;
   };
 
   const renderSelectedCandidateView = (selection?: CandidateSelection): void => {
+    state.selectedSelection = selection;
+    copySelectedCandidateButton.disabled = !selection;
     renderSelectedCandidate(candidateDetail, selectedCandidateSummary, selection);
     scheduleAppMinimumWidthUpdate(shell, candidateDetail);
   };
+
+  copySelectedCandidateButton.addEventListener('click', () => {
+    if (!state.selectedSelection) return;
+    const payload = createSelectedCandidateCopyPayload(state.selectedSelection, state.sourceName);
+    void copyTextToClipboard(JSON.stringify(payload, null, 2)).then(() => {
+      addLog('success', 'selectedCandidate.copy', `${payload.context}: copied selected analysis JSON to clipboard.`);
+    }).catch((error) => {
+      addLog('error', 'selectedCandidate.copy failed', getErrorMessage(error));
+    });
+  });
 
   const loadBytes = async (bytes: Uint8Array, sourceName = 'input.der', renderInViewer = true): Promise<void> => {
     const startedAt = performance.now();
     state.bytes = bytes;
     state.sourceName = sourceName;
     if (renderInViewer) {
-      inputViewer.loadBytes(bytes, `Opened ${sourceName} in the read-only ASN.1 viewer.`);
-      inputViewer.setEditable?.(false);
+      inputViewer.loadBytes(bytes, `Opened ${sourceName} in the ASN.1 viewer.`);
     }
     addLog('info', 'loadBytes', `${sourceName}: ${bytes.byteLength} bytes`);
     try {
@@ -302,6 +336,7 @@ export function initAsn1DefinitionSifter(options: Asn1DefinitionSifterAppOptions
     state.bytes = null;
     state.selectedRootCandidates = new Map();
     state.selectedSubtreeCandidates = new Map();
+    state.selectedSelection = undefined;
     candidateTree.textContent = 'No candidate report yet.';
     renderSelectedCandidateView();
     setCandidateNotice('Candidate results will appear after input is loaded.');
@@ -346,7 +381,9 @@ export function initAsn1DefinitionSifter(options: Asn1DefinitionSifterAppOptions
       return;
     }
     if (state.bytes && bytesEqual(state.bytes, bytes)) return;
-    void loadBytes(bytes, 'PkiStudioJS viewer', false);
+    addLog('info', 'PkiStudioJS.viewer.change', `Viewer document changed${lastViewerEditAction ? ` after ${lastViewerEditAction}` : ''}; refreshing candidates.`);
+    lastViewerEditAction = undefined;
+    void loadBytes(bytes, state.sourceName ?? 'PkiStudioJS viewer', false);
   };
   const viewerObserver = new MutationObserver(() => window.setTimeout(synchronizeFromInputViewer));
   if (inputViewer.root) viewerObserver.observe(inputViewer.root, { childList: true, subtree: true, characterData: true });
@@ -753,6 +790,46 @@ function formatSelectedBytes(selection: CandidateSelection): string {
   return bytesToCompactHex(selection.bytes);
 }
 
+function createSelectedCandidateCopyPayload(selection: CandidateSelection, sourceName: string | null): Record<string, unknown> {
+  const candidate = selection.candidate;
+  return {
+    sourceName,
+    context: selection.context,
+    hexOnly: Boolean(selection.hexOnly),
+    hexSummary: selection.hexSummary,
+    displayScore: selection.displayScore ?? candidate?.score,
+    displayConfidence: selection.displayConfidence ?? candidate?.confidence,
+    candidate: candidate ? {
+      typeName: candidate.typeName,
+      moduleName: candidate.moduleName,
+      qualifiedName: formatCandidateName(candidate),
+      score: candidate.score,
+      confidence: candidate.confidence,
+      evidence: candidate.evidence,
+      diagnostics: candidate.diagnostics,
+      ambiguities: candidate.ambiguities,
+      matchedPaths: candidate.matchedPaths
+    } : undefined,
+    selectedBytesHex: selection.bytes ? bytesToCompactHex(selection.bytes) : undefined
+  };
+}
+
+async function copyTextToClipboard(text: string): Promise<void> {
+  if (navigator.clipboard?.writeText) {
+    await navigator.clipboard.writeText(text);
+    return;
+  }
+  const field = document.createElement('textarea');
+  field.value = text;
+  field.style.position = 'fixed';
+  field.style.left = '-9999px';
+  document.body.append(field);
+  field.select();
+  const copied = document.execCommand('copy');
+  field.remove();
+  if (!copied) throw new Error('Clipboard write was not available.');
+}
+
 function bytesToCompactHex(bytes: Uint8Array): string {
   return Array.from(bytes, (byte) => byte.toString(16).padStart(2, '0')).join('');
 }
@@ -967,13 +1044,21 @@ function isInputViewerEmpty(viewer: PkiStudioViewerInstance): boolean {
   return Boolean(viewer.root.querySelector('.viewer.empty'));
 }
 
-function disableInputViewerEditContextActions(viewer: PkiStudioViewerInstance): void {
-  if (!viewer.root) return;
-  const allowedActions = new Set(['send-to', 'send-new-window', 'send-new-window-extracted', 'copy-tree', 'copy-hex']);
-  for (const button of viewer.root.querySelectorAll<HTMLButtonElement>('button[data-node-action]')) {
-    const action = button.dataset.nodeAction ?? '';
-    if (!allowedActions.has(action)) button.disabled = true;
-  }
+function initializeInputViewerEditActionLogging(viewer: PkiStudioViewerInstance, logEditAction: (action: string, label: string) => void): void {
+  viewer.root?.addEventListener('click', (event) => {
+    const button = (event.target as HTMLElement).closest<HTMLButtonElement>('button[data-node-action]');
+    const action = button?.dataset.nodeAction;
+    if (!action || !isViewerEditAction(action)) return;
+    logEditAction(action, normalizeActionLabel(button.textContent ?? action));
+  }, true);
+}
+
+function isViewerEditAction(action: string): boolean {
+  return action === 'edit' || action === 'delete' || action.startsWith('insert-') || action.startsWith('add-child');
+}
+
+function normalizeActionLabel(label: string): string {
+  return label.replace(/\s+/g, ' ').trim() || 'Edit action';
 }
 
 function applyEmbeddedViewerSurfaceStyles(viewer: PkiStudioViewerInstance): void {
