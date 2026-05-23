@@ -13,7 +13,7 @@ Current version: 0.1.0
 - ASN.1 Schema Model matching through `@pkistudio/asn1instancebuilder` definitions.
 - Candidate ranking with numeric scores, confidence labels, evidence, diagnostics, ambiguity notes, and matched node/schema paths.
 - PkiStudioJS adapter for parsing supported ASN.1 inputs into resolver-ready TLV nodes.
-- Built-in PKI component corpus for common fragments such as `AlgorithmIdentifier`, `SubjectPublicKeyInfo`, `Certificate`, `CertificationRequest`, `PrivateKeyInfo`, and `ContentInfo`.
+- Built-in PKI component corpus for common fragments such as `AlgorithmIdentifier`, `SubjectPublicKeyInfo`, `RSAPublicKey`, `Certificate`, `CertificationRequest`, `PrivateKeyInfo`, and `ContentInfo`.
 - Document hypothesis helper with annotated tree output.
 
 ## Install

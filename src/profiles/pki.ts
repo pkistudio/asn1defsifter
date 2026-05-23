@@ -10,6 +10,7 @@ export const pkiProfileTypeNames: Record<PkiProfileName, string[]> = {
     'Name',
     'RelativeDistinguishedName',
     'RDNSequence',
+    'RSAPublicKey',
     'SubjectPublicKeyInfo',
     'Time',
     'Validity'
@@ -22,6 +23,7 @@ export const pkiProfileTypeNames: Record<PkiProfileName, string[]> = {
     'AlgorithmIdentifier',
     'Name',
     'Validity',
+    'RSAPublicKey',
     'SubjectPublicKeyInfo',
     'Extension',
     'Extensions'
@@ -31,6 +33,7 @@ export const pkiProfileTypeNames: Record<PkiProfileName, string[]> = {
     'CertificationRequestInfo',
     'AlgorithmIdentifier',
     'Name',
+    'RSAPublicKey',
     'SubjectPublicKeyInfo',
     'AttributeTypeAndValue'
   ],

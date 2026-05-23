@@ -34,6 +34,10 @@ SubjectPublicKeyInfo ::= SEQUENCE {
   algorithm AlgorithmIdentifier,
   subjectPublicKey BIT STRING
 }
+RSAPublicKey ::= SEQUENCE {
+  modulus INTEGER,
+  publicExponent INTEGER
+}
 Extension ::= SEQUENCE {
   extnID OBJECT IDENTIFIER,
   critical BOOLEAN DEFAULT FALSE,

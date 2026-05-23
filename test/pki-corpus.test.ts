@@ -9,6 +9,7 @@ describe('createPkiComponentCorpus', () => {
 
     expect(typeNames).toContain('AlgorithmIdentifier');
     expect(typeNames).toContain('SubjectPublicKeyInfo');
+    expect(typeNames).toContain('RSAPublicKey');
     expect(typeNames).toContain('Certificate');
     expect(typeNames).toContain('CertificationRequest');
     expect(typeNames).toContain('PrivateKeyInfo');
@@ -21,6 +22,17 @@ describe('createPkiComponentCorpus', () => {
 
     expect(candidates[0]).toMatchObject({
       typeName: 'SubjectPublicKeyInfo',
+      moduleName: 'PkiComponents',
+      confidence: 'high'
+    });
+  });
+
+  it('matches RSAPublicKey from the built-in corpus', () => {
+    const node = sequence([integer(), integer()]);
+    const candidates = findAsn1Candidates(node, { schemaCorpus: createPkiComponentCorpus(), maxResults: 5 });
+
+    expect(candidates[0]).toMatchObject({
+      typeName: 'RSAPublicKey',
       moduleName: 'PkiComponents',
       confidence: 'high'
     });
@@ -73,6 +85,7 @@ describe('createPkiComponentCorpus', () => {
 
   it('provides PKI profile type presets for candidate filters', () => {
     expect(pkiProfileTypeNames.x509).toContain('Certificate');
+    expect(pkiProfileTypeNames.x509).toContain('RSAPublicKey');
     expect(pkiProfileTypeNames.pkcs10).toContain('CertificationRequest');
     expect(pkiProfileTypeNames.pkcs8).toContain('PrivateKeyInfo');
     expect(pkiProfileTypeNames.cms).toContain('ContentInfo');
