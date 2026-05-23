@@ -114,6 +114,12 @@ These filters keep the resolver deterministic while reducing common PKI false po
 
 The package includes a small browser viewer for exercising the resolver without embedding it into another PkiStudio surface. It provides a left pane that is only an embedded read-only PkiStudioJS viewer, a candidate tree pane, a selected candidate details pane with selected bytes, and a bottom API log pane. Use the PkiStudioJS viewer's own `Load` menu to load data; the resolver watches the loaded viewer document and refreshes candidates from it. Terminal BIT STRING or OCTET STRING values with no ASN.1 candidates are shown as HEX-only tree items so raw key material, such as EC public points, remains inspectable without being mislabeled as another ASN.1 type.
 
+The viewer shell uses translucent surfaces and supports light and dark themes. The embedded viewer and candidate panes keep their outer frames visually quiet, while the embedded viewer menu remains framed like the PkiStudio family chrome. Splitters between the viewer and candidates panes, above selected candidate details, and above the API log let users resize the working areas.
+
+Selected candidate details lay out evidence, diagnostics, ambiguities, matched paths, and selected bytes as content-width sections. Non-byte sections keep their lines unwrapped and expand the application minimum width when needed, while `Selected bytes` can wrap and fills the remaining row width or moves to the next row when the remaining space is too narrow.
+
+The API log records the high-level parse and report operations and then adds one line per root candidate. Candidate log rows include the candidate type, score, confidence, evidence, diagnostic, ambiguity, and matched-path counts, plus representative evidence and diagnostic messages so the ranking work is visible without opening the selected-candidate pane.
+
 The embedded viewer stays read-only. Its `Send to` menu can open selected DER in a normal editable PkiStudioJS viewer tab through `viewer.html`; other editing-oriented context menu actions remain visible but disabled. Closing the embedded viewer clears the candidate and selected-candidate panes.
 
 ```ts

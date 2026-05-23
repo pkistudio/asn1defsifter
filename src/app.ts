@@ -80,6 +80,57 @@ type SubtreeDisplayNode = {
 
 const MAX_LOG_ENTRIES = 80;
 const DEFAULT_HEX_SOURCE = 'clipboard.hex';
+const DEFAULT_APP_MIN_WIDTH = 640;
+const EMBEDDED_VIEWER_SURFACE_STYLES = `
+:host {
+  --window: transparent !important;
+  --panel: rgb(255 255 255 / 58%) !important;
+  --panel-border: rgb(185 196 208 / 0%) !important;
+  --chrome-start: rgb(255 255 255 / 60%) !important;
+  --chrome: rgb(238 243 248 / 42%) !important;
+  --subtle-border: rgb(214 222 230 / 54%) !important;
+}
+
+@media (prefers-color-scheme: dark) {
+  :host {
+    --window: transparent !important;
+    --panel: rgb(37 43 52 / 46%) !important;
+    --panel-border: rgb(79 90 104 / 0%) !important;
+    --chrome-start: rgb(48 55 67 / 50%) !important;
+    --chrome: rgb(37 44 54 / 34%) !important;
+    --subtle-border: rgb(119 132 150 / 34%) !important;
+  }
+}
+
+:host([data-pkistudio-theme="dark"]) {
+  --window: transparent !important;
+  --panel: rgb(37 43 52 / 46%) !important;
+  --panel-border: rgb(79 90 104 / 0%) !important;
+  --chrome-start: rgb(48 55 67 / 50%) !important;
+  --chrome: rgb(37 44 54 / 34%) !important;
+  --subtle-border: rgb(119 132 150 / 34%) !important;
+}
+
+.menu,
+.card {
+  box-shadow: none !important;
+}
+
+.menu {
+  border: 1px solid var(--subtle-border) !important;
+  border-radius: 3px !important;
+  background: linear-gradient(var(--chrome-start), var(--chrome)) !important;
+}
+
+.card {
+  border: 0 !important;
+}
+
+.card,
+.viewer {
+  background: transparent !important;
+}
+`;
 
 declare global {
   interface Window {
@@ -110,6 +161,7 @@ export function initAsn1DefinitionSifter(options: Asn1DefinitionSifterAppOptions
         <section class="ads-viewer-pane" aria-label="Read-only PkiStudioJS viewer">
           <div id="adsInputViewer" class="ads-input-viewer"></div>
         </section>
+        <div id="adsWorkspaceResizer" class="ads-workspace-resizer" role="separator" aria-label="Resize viewer and candidates" aria-orientation="vertical" tabindex="0"></div>
         <section class="ads-pane ads-candidate-pane" aria-label="Candidate results">
           <header class="ads-pane-menu">
             <strong>Candidates</strong>
@@ -120,6 +172,7 @@ export function initAsn1DefinitionSifter(options: Asn1DefinitionSifterAppOptions
           <div id="adsCandidateNotice" class="ads-notice" role="status">Candidate results will appear after input is loaded.</div>
         </section>
       </section>
+      <div id="adsSelectedPaneResizer" class="ads-selected-pane-resizer" role="separator" aria-label="Resize selected candidate" aria-orientation="horizontal" tabindex="0"></div>
       <section class="ads-selected-pane" aria-label="Selected candidate details">
         <header class="ads-selected-header">
           <strong>Selected Candidate</strong>
@@ -154,12 +207,17 @@ export function initAsn1DefinitionSifter(options: Asn1DefinitionSifterAppOptions
   const closeAboutButton = getElement<HTMLButtonElement>(app, '#adsCloseAboutButton');
   const clearLogButton = getElement<HTMLButtonElement>(app, '#adsClearLogButton');
   const inputViewerMount = getElement<HTMLElement>(app, '#adsInputViewer');
+  if (options.theme) inputViewerMount.setAttribute('data-pkistudio-theme', options.theme);
   const candidateTree = getElement<HTMLElement>(app, '#adsCandidateTree');
   const selectedCandidateSummary = getElement<HTMLElement>(app, '#adsSelectedCandidateSummary');
   const candidateDetail = getElement<HTMLElement>(app, '#adsCandidateDetail');
   const candidateNotice = getElement<HTMLElement>(app, '#adsCandidateNotice');
   const apiLog = getElement<HTMLElement>(app, '#adsApiLog');
   const apiLogResizer = getElement<HTMLElement>(app, '#adsApiLogResizer');
+  const selectedPane = getElement<HTMLElement>(app, '.ads-selected-pane');
+  const selectedPaneResizer = getElement<HTMLElement>(app, '#adsSelectedPaneResizer');
+  const workspace = getElement<HTMLElement>(app, '.ads-workspace');
+  const workspaceResizer = getElement<HTMLElement>(app, '#adsWorkspaceResizer');
   const inputViewer = (PkiStudio as PkiStudioViewerApi).init({
     mount: inputViewerMount,
     oidResolver: options.viewer?.oidResolver ?? (PkiStudioOidResolver as PkiStudioOidResolverApi),
@@ -167,11 +225,15 @@ export function initAsn1DefinitionSifter(options: Asn1DefinitionSifterAppOptions
     editable: false
   });
   inputViewer.setEditable?.(false);
+  applyEmbeddedViewerSurfaceStyles(inputViewer);
   inputViewer.root?.addEventListener('click', () => window.setTimeout(() => disableInputViewerEditContextActions(inputViewer)));
   inputViewer.root?.addEventListener('pointerover', () => disableInputViewerEditContextActions(inputViewer));
   inputViewer.root?.addEventListener('focusin', () => disableInputViewerEditContextActions(inputViewer));
 
-  initializeApiLogResizer(getElement<HTMLElement>(app, '.ads-shell'), apiLogResizer);
+  const shell = getElement<HTMLElement>(app, '.ads-shell');
+  initializeSelectedPaneResizer(shell, selectedPane, selectedPaneResizer);
+  initializeWorkspaceResizer(shell, workspace, workspaceResizer);
+  initializeApiLogResizer(shell, apiLogResizer);
 
   const addLog = (level: LogLevel, label: string, detail?: string): void => {
     state.logs.push({ level, label, detail, timestamp: new Date() });
@@ -181,6 +243,11 @@ export function initAsn1DefinitionSifter(options: Asn1DefinitionSifterAppOptions
 
   const setCandidateNotice = (message: string): void => {
     candidateNotice.textContent = message;
+  };
+
+  const renderSelectedCandidateView = (selection?: CandidateSelection): void => {
+    renderSelectedCandidate(candidateDetail, selectedCandidateSummary, selection);
+    scheduleAppMinimumWidthUpdate(shell, candidateDetail);
   };
 
   const loadBytes = async (bytes: Uint8Array, sourceName = 'input.der', renderInViewer = true): Promise<void> => {
@@ -205,7 +272,7 @@ export function initAsn1DefinitionSifter(options: Asn1DefinitionSifterAppOptions
       state.selectedRootCandidates = new Map();
       state.selectedSubtreeCandidates = new Map();
       renderCandidateTree(candidateTree, report, bytes, state.selectedRootCandidates, state.selectedSubtreeCandidates, (selection, selectedElement) => {
-        renderSelectedCandidate(candidateDetail, selectedCandidateSummary, selection);
+        renderSelectedCandidateView(selection);
         markSelectedTreeItem(candidateTree, selectedElement);
       });
       const rootCount = report.roots.length;
@@ -213,10 +280,11 @@ export function initAsn1DefinitionSifter(options: Asn1DefinitionSifterAppOptions
       const subtreeCount = report.roots.reduce((sum, root) => sum + (root.subtrees?.length ?? 0), 0);
       setCandidateNotice(`Resolved ${candidateCount} root candidate(s) across ${rootCount} root node(s); ${subtreeCount} subtree report(s).`);
       addLog('success', 'createPkiCandidateReport', `Completed in ${formatDuration(startedAt)} with ${candidateCount} root candidate(s).`);
+      logCandidateReportDetails(report, addLog);
     } catch (error) {
       state.report = null;
       candidateTree.textContent = 'No candidate report available.';
-      renderSelectedCandidate(candidateDetail, selectedCandidateSummary);
+      renderSelectedCandidateView();
       const message = getErrorMessage(error);
       setCandidateNotice(message);
       addLog('error', 'createPkiCandidateReport failed', message);
@@ -235,7 +303,7 @@ export function initAsn1DefinitionSifter(options: Asn1DefinitionSifterAppOptions
     state.selectedRootCandidates = new Map();
     state.selectedSubtreeCandidates = new Map();
     candidateTree.textContent = 'No candidate report yet.';
-    renderSelectedCandidate(candidateDetail, selectedCandidateSummary);
+    renderSelectedCandidateView();
     setCandidateNotice('Candidate results will appear after input is loaded.');
     addLog('success', 'PkiStudioJS.viewer.close', detail);
   };
@@ -244,6 +312,7 @@ export function initAsn1DefinitionSifter(options: Asn1DefinitionSifterAppOptions
     document.removeEventListener('click', handleDocumentClick);
     viewerObserver.disconnect();
     inputViewer.close?.();
+    document.documentElement.style.removeProperty('--ads-app-min-width');
     app.innerHTML = '';
   };
 
@@ -746,6 +815,7 @@ function getTreeSummary(node: HTMLElement): HTMLElement {
 function createKeyValue(label: string, value: string): HTMLElement {
   const block = document.createElement('section');
   block.className = 'ads-key-value';
+  if (label === 'Selected bytes') block.classList.add('ads-key-value-bytes');
   const heading = document.createElement('h3');
   heading.textContent = label;
   const content = document.createElement('pre');
@@ -776,6 +846,38 @@ function renderLogs(container: HTMLElement, logs: LogEntry[]): void {
     container.append(row);
   }
   container.scrollTop = container.scrollHeight;
+}
+
+function logCandidateReportDetails(report: CandidateReport, addLog: (level: LogLevel, label: string, detail?: string) => void): void {
+  for (const root of report.roots) {
+    for (const [index, candidate] of sortCandidatesByScore(root.candidates).entries()) {
+      addLog(getCandidateLogLevel(candidate), `candidate root ${root.index}.${index + 1}`, formatCandidateLogDetail(candidate));
+    }
+  }
+}
+
+function getCandidateLogLevel(candidate: Candidate): LogLevel {
+  if (candidate.diagnostics.some((diagnostic) => diagnostic.severity === 'error')) return 'error';
+  if (candidate.diagnostics.some((diagnostic) => diagnostic.severity === 'warning') || candidate.confidence === 'low') return 'warning';
+  return candidate.confidence === 'high' ? 'success' : 'info';
+}
+
+function formatCandidateLogDetail(candidate: Candidate): string {
+  const diagnostics = candidate.diagnostics.slice(0, 2).map((diagnostic) => `${diagnostic.severity}: ${diagnostic.message}`);
+  const notes = [
+    `type=${formatCandidateName(candidate)}`,
+    `score=${formatScore(candidate.score)}`,
+    `confidence=${candidate.confidence}`,
+    `evidence=${candidate.evidence.length}`,
+    `diagnostics=${candidate.diagnostics.length}`,
+    `ambiguities=${candidate.ambiguities.length}`,
+    `matchedPaths=${candidate.matchedPaths.length}`
+  ];
+  const evidence = candidate.evidence.slice(0, 2);
+  if (evidence.length > 0) notes.push(`evidence: ${evidence.join(' / ')}`);
+  if (diagnostics.length > 0) notes.push(`diagnostics: ${diagnostics.join(' / ')}`);
+  if (candidate.ambiguities.length > 0) notes.push(`ambiguity: ${candidate.ambiguities[0]}`);
+  return notes.join(' | ');
 }
 
 function formatLogTimestamp(date: Date): string {
@@ -874,6 +976,52 @@ function disableInputViewerEditContextActions(viewer: PkiStudioViewerInstance): 
   }
 }
 
+function applyEmbeddedViewerSurfaceStyles(viewer: PkiStudioViewerInstance): void {
+  if (!viewer.root) return;
+  const style = document.createElement('style');
+  style.textContent = EMBEDDED_VIEWER_SURFACE_STYLES;
+  viewer.root.prepend(style);
+}
+
+function scheduleAppMinimumWidthUpdate(root: HTMLElement, detail: HTMLElement): void {
+  window.requestAnimationFrame(() => updateAppMinimumWidth(root, detail));
+}
+
+function updateAppMinimumWidth(root: HTMLElement, detail: HTMLElement): void {
+  const sectionWidth = getSelectedDetailMinimumContentWidth(detail);
+  const nextWidth = Math.max(DEFAULT_APP_MIN_WIDTH, sectionWidth);
+  root.style.setProperty('--ads-app-min-width', `${Math.ceil(nextWidth)}px`);
+  document.documentElement.style.setProperty('--ads-app-min-width', `${Math.ceil(nextWidth)}px`);
+}
+
+function getSelectedDetailMinimumContentWidth(detail: HTMLElement): number {
+  const sections = Array.from(detail.querySelectorAll<HTMLElement>('.ads-key-value:not(.ads-key-value-bytes)'));
+  if (sections.length === 0) return DEFAULT_APP_MIN_WIDTH;
+  const detailStyle = getComputedStyle(detail);
+  const detailChromeWidth = sumPixels(
+    detailStyle.marginLeft,
+    detailStyle.marginRight,
+    detailStyle.paddingLeft,
+    detailStyle.paddingRight,
+    detailStyle.borderLeftWidth,
+    detailStyle.borderRightWidth
+  );
+  const maxSectionWidth = Math.max(...sections.map(getNaturalSectionWidth));
+  return maxSectionWidth + detailChromeWidth + 2;
+}
+
+function getNaturalSectionWidth(section: HTMLElement): number {
+  const heading = section.querySelector<HTMLElement>('h3');
+  const content = section.querySelector<HTMLElement>('pre');
+  const sectionStyle = getComputedStyle(section);
+  const sectionChromeWidth = sumPixels(sectionStyle.borderLeftWidth, sectionStyle.borderRightWidth);
+  return Math.max(heading?.scrollWidth ?? 0, content?.scrollWidth ?? 0) + sectionChromeWidth;
+}
+
+function sumPixels(...values: string[]): number {
+  return values.reduce((sum, value) => sum + (Number.parseFloat(value) || 0), 0);
+}
+
 function hexToBytes(text: string): Uint8Array {
   const normalized = text.replace(/(?:0x|[^0-9a-fA-F])/g, '');
   if (normalized.length === 0) throw new Error('Clipboard does not contain hexadecimal input.');
@@ -946,9 +1094,65 @@ function initializeApiLogResizer(root: HTMLElement, resizer: HTMLElement): void 
   resizer.addEventListener('pointerdown', (event) => {
     event.preventDefault();
     startY = event.clientY;
-    const currentHeight = getComputedStyle(root).getPropertyValue('--ads-api-log-height').trim();
-    startHeight = Number.parseFloat(currentHeight) || 156;
+    startHeight = root.querySelector('.ads-log-pane')?.getBoundingClientRect().height ?? 156;
     root.classList.add('ads-resizing-rows');
+    document.addEventListener('pointermove', resize);
+    document.addEventListener('pointerup', stopResize);
+  });
+}
+
+function initializeSelectedPaneResizer(root: HTMLElement, pane: HTMLElement, resizer: HTMLElement): void {
+  const minHeight = 150;
+  const minWorkspaceHeight = 220;
+  let startY = 0;
+  let startHeight = 0;
+
+  const resize = (event: PointerEvent): void => {
+    const nextHeight = clampNumber(startHeight - (event.clientY - startY), minHeight, getMaxSelectedPaneHeight(root, minWorkspaceHeight, minHeight));
+    root.style.setProperty('--ads-selected-height', `${nextHeight}px`);
+  };
+
+  const stopResize = (): void => {
+    root.classList.remove('ads-resizing-rows');
+    document.removeEventListener('pointermove', resize);
+    document.removeEventListener('pointerup', stopResize);
+  };
+
+  resizer.addEventListener('pointerdown', (event) => {
+    event.preventDefault();
+    startY = event.clientY;
+    startHeight = pane.getBoundingClientRect().height || 180;
+    root.classList.add('ads-resizing-rows');
+    document.addEventListener('pointermove', resize);
+    document.addEventListener('pointerup', stopResize);
+  });
+}
+
+function initializeWorkspaceResizer(root: HTMLElement, workspace: HTMLElement, resizer: HTMLElement): void {
+  const minViewerWidth = 280;
+  const minCandidateWidth = 320;
+  let startX = 0;
+  let startWidth = 0;
+
+  const resize = (event: PointerEvent): void => {
+    const resizerWidth = resizer.getBoundingClientRect().width || 6;
+    const availableWidth = workspace.getBoundingClientRect().width - resizerWidth;
+    const maxViewerWidth = Math.max(minViewerWidth, availableWidth - minCandidateWidth);
+    const nextWidth = clampNumber(startWidth + event.clientX - startX, minViewerWidth, maxViewerWidth);
+    workspace.style.setProperty('--ads-viewer-width', `${nextWidth}px`);
+  };
+
+  const stopResize = (): void => {
+    root.classList.remove('ads-resizing-columns');
+    document.removeEventListener('pointermove', resize);
+    document.removeEventListener('pointerup', stopResize);
+  };
+
+  resizer.addEventListener('pointerdown', (event) => {
+    event.preventDefault();
+    startX = event.clientX;
+    startWidth = workspace.querySelector('.ads-viewer-pane')?.getBoundingClientRect().width ?? 420;
+    root.classList.add('ads-resizing-columns');
     document.addEventListener('pointermove', resize);
     document.addEventListener('pointerup', stopResize);
   });
@@ -956,10 +1160,24 @@ function initializeApiLogResizer(root: HTMLElement, resizer: HTMLElement): void 
 
 function getMaxApiLogHeight(root: HTMLElement, minWorkspaceHeight: number, minApiLogHeight: number): number {
   const toolbarHeight = root.querySelector('.ads-toolbar')?.getBoundingClientRect().height ?? 0;
-  const selectedPaneMinHeight = 150;
-  const splitterHeight = root.querySelector('.ads-api-log-resizer')?.getBoundingClientRect().height ?? 6;
+  const selectedPaneHeight = root.querySelector('.ads-selected-pane')?.getBoundingClientRect().height ?? 150;
+  const splitterHeight = getHorizontalSplitterHeight(root);
   const availableHeight = root.getBoundingClientRect().height || window.innerHeight;
-  return Math.max(minApiLogHeight, Math.floor(availableHeight - toolbarHeight - splitterHeight - selectedPaneMinHeight - minWorkspaceHeight));
+  return Math.max(minApiLogHeight, Math.floor(availableHeight - toolbarHeight - splitterHeight - selectedPaneHeight - minWorkspaceHeight));
+}
+
+function getMaxSelectedPaneHeight(root: HTMLElement, minWorkspaceHeight: number, minSelectedHeight: number): number {
+  const toolbarHeight = root.querySelector('.ads-toolbar')?.getBoundingClientRect().height ?? 0;
+  const apiLogHeight = root.querySelector('.ads-log-pane')?.getBoundingClientRect().height ?? 86;
+  const splitterHeight = getHorizontalSplitterHeight(root);
+  const availableHeight = root.getBoundingClientRect().height || window.innerHeight;
+  return Math.max(minSelectedHeight, Math.floor(availableHeight - toolbarHeight - splitterHeight - apiLogHeight - minWorkspaceHeight));
+}
+
+function getHorizontalSplitterHeight(root: HTMLElement): number {
+  const selectedSplitterHeight = root.querySelector('.ads-selected-pane-resizer')?.getBoundingClientRect().height ?? 6;
+  const apiLogSplitterHeight = root.querySelector('.ads-api-log-resizer')?.getBoundingClientRect().height ?? 6;
+  return selectedSplitterHeight + apiLogSplitterHeight;
 }
 
 function clampNumber(value: number, min: number, max: number): number {
