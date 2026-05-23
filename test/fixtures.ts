@@ -8,6 +8,10 @@ export function set(children: TlvNode[]): TlvNode {
   return { tagClass: 'universal', tagNumber: 17, constructed: true, tagName: 'SET', children };
 }
 
+export function context(tagNumber: number, children: TlvNode[] = [], constructed = true): TlvNode {
+  return { tagClass: 'context', tagNumber, constructed, children };
+}
+
 export function integer(): TlvNode {
   return { tagClass: 'universal', tagNumber: 2, constructed: false, tagName: 'INTEGER', valueBytes: new Uint8Array([1]) };
 }

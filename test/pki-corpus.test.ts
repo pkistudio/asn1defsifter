@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { createPkiComponentCorpus, findAsn1Candidates } from '../src/core';
-import { bitString, integer, nullNode, octetString, oid, sequence, set, utf8String } from './fixtures';
+import { bitString, context, integer, nullNode, octetString, oid, sequence, set, utf8String } from './fixtures';
 
 describe('createPkiComponentCorpus', () => {
   it('provides reusable PKI component definitions', () => {
@@ -54,5 +54,20 @@ describe('createPkiComponentCorpus', () => {
     const candidates = findAsn1Candidates(node, { schemaCorpus: createPkiComponentCorpus(), maxResults: 5 });
 
     expect(candidates[0].typeName).toBe('PrivateKeyInfo');
+  });
+
+  it('validates IMPLICIT SET OF content when matching tagged attributes', () => {
+    const attributes = context(0, [sequence([oid('1.2.840.113549.1.9.14'), utf8String('extensionRequest')])]);
+    const node = sequence([
+      integer(),
+      sequence([set([sequence([oid('2.5.4.3'), utf8String('Example CA')])])]),
+      sequence([sequence([oid('1.2.840.113549.1.1.1'), nullNode()]), bitString()]),
+      attributes
+    ]);
+    const candidates = findAsn1Candidates(node, { schemaCorpus: createPkiComponentCorpus(), maxResults: 5 });
+
+    expect(candidates[0].typeName).toBe('CertificationRequestInfo');
+    expect(candidates[0].evidence).toContain('Context-specific tag [0] matches implicit tagging.');
+    expect(candidates[0].evidence).toContain('Node matches SET OF container.');
   });
 });

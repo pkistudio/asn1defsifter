@@ -80,7 +80,13 @@ function matchTagged(node: TlvNode, type: Extract<Asn1Type, { kind: 'tagged' }>,
     }
     return 0.25 + 0.75 * matchTypeInternal(child, type.type, state, `${schemaPath}.[${type.tag.number}]`, `${nodePath}.0`);
   }
-  return Math.max(0.65, matchTypeInternal({ ...node, tagClass: 'universal' }, type.type, state, schemaPath, nodePath) * 0.8);
+  const expectedUniversalTag = getExpectedUniversalTag(type.type, state.schema);
+  if (expectedUniversalTag === undefined) {
+    state.ambiguities.push(`Implicit tag ${schemaPath} matched [${type.tag.number}], but the underlying universal tag could not be inferred.`);
+    return 0.65;
+  }
+  const implicitNode: TlvNode = { ...node, tagClass: 'universal', tagNumber: expectedUniversalTag };
+  return 0.25 + 0.75 * matchTypeInternal(implicitNode, type.type, state, schemaPath, nodePath);
 }
 
 function matchSequence(node: TlvNode, fields: Asn1Field[], state: MatchState, schemaPath: string, nodePath: string, expectedTag: number, label: string): number {
@@ -237,6 +243,18 @@ function matchCollection(node: TlvNode, elementType: Asn1Type, state: MatchState
 
 function resolveDefinedType(schema: Asn1SchemaModule, typeName: string): Asn1Type | undefined {
   return schema.types.find((definition) => definition.name === typeName)?.type;
+}
+
+function getExpectedUniversalTag(type: Asn1Type, schema: Asn1SchemaModule): number | undefined {
+  if (type.kind === 'defined') {
+    const resolved = resolveDefinedType(schema, type.typeName);
+    return resolved ? getExpectedUniversalTag(resolved, schema) : undefined;
+  }
+  if (type.kind === 'tagged') return type.tag.number;
+  if (type.kind === 'sequence' || type.kind === 'sequenceOf') return 16;
+  if (type.kind === 'set' || type.kind === 'setOf') return 17;
+  if (type.kind === 'choice') return undefined;
+  return universalTagForPrimitive(type.kind);
 }
 
 function addEvidence(state: MatchState, path: string, message: string): void {
