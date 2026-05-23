@@ -4,6 +4,7 @@ import type { TlvFeatures, TlvNode } from './types.js';
 export function extractDerFeatures(node: TlvNode): TlvFeatures {
   const children = node.children ?? [];
   const oidValues = collectOidValues(node);
+  const oidNames = collectOidNames(node);
   return {
     tagClass: node.tagClass,
     tagNumber: node.tagNumber,
@@ -12,6 +13,7 @@ export function extractDerFeatures(node: TlvNode): TlvFeatures {
     childCount: children.length,
     childTagSequence: children.map(describeNodeTag),
     oidValues,
+    oidNames,
     primitiveValueKind: inferPrimitiveValueKind(node),
     valueLength: node.valueBytes?.length
   };
@@ -21,6 +23,12 @@ function collectOidValues(node: TlvNode): string[] {
   const ownOid = node.oid ? [node.oid] : [];
   const childOids = (node.children ?? []).flatMap(collectOidValues);
   return [...ownOid, ...childOids];
+}
+
+function collectOidNames(node: TlvNode): string[] {
+  const ownName = node.oidName ? [node.oidName] : [];
+  const childNames = (node.children ?? []).flatMap(collectOidNames);
+  return [...ownName, ...childNames];
 }
 
 function inferPrimitiveValueKind(node: TlvNode): string | undefined {

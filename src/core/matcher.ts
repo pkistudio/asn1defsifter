@@ -58,6 +58,7 @@ function matchPrimitive(node: TlvNode, kind: string, state: MatchState, schemaPa
   }
   if (kind === 'objectIdentifier' && node.oid) {
     addEvidence(state, nodePath, `Node matches objectIdentifier with value ${node.oid}.`);
+    if (node.oidName) addEvidence(state, nodePath, `OID ${node.oid} resolves to ${node.oidName}.`);
   } else {
     addEvidence(state, nodePath, `Node matches ${kind}.`);
   }

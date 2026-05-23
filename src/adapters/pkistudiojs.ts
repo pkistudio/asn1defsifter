@@ -1,3 +1,5 @@
+import pkistudioCore from '@pkistudio/pkistudiojs/core';
+import oidResolver from '@pkistudio/pkistudiojs/oid-resolver';
 import type { TlvNode, TlvTagClass } from '../core/types.js';
 
 interface PkiStudioLikeNode {
@@ -24,17 +26,13 @@ interface PkiStudioParseResult {
   nodes?: PkiStudioLikeNode[];
 }
 
-interface PkiStudioCoreModule {
-  parseInput(input: unknown, options?: Record<string, unknown>): unknown;
-}
-
 export async function parseInputToTlvNodes(input: unknown, options?: Record<string, unknown>): Promise<TlvNode[]> {
-  const core = await loadPkiStudioCore();
-  const parsed = core.parseInput(input, options) as PkiStudioParseResult;
+  const parsed = pkistudioCore.parseInput(input, options) as PkiStudioParseResult;
   return (parsed.nodes ?? []).map(pkistudioNodeToTlvNode);
 }
 
 export function pkistudioNodeToTlvNode(node: PkiStudioLikeNode): TlvNode {
+  const oid = node.oid ?? node.oidValue ?? decodeOidFromNode(node);
   return {
     id: node.id,
     tagClass: normalizeTagClass(node.tagClass ?? node.className),
@@ -44,16 +42,12 @@ export function pkistudioNodeToTlvNode(node: PkiStudioLikeNode): TlvNode {
     valueBytes: normalizeBytes(node.valueBytes ?? node.contentBytes),
     encodedBytes: normalizeBytes(node.bytes),
     value: node.value,
-    oid: node.oid ?? node.oidValue ?? decodeOidFromNode(node),
+    oid,
+    oidName: oid ? resolveOidName(oid) : undefined,
     children: node.children?.map(pkistudioNodeToTlvNode),
     start: node.start,
     end: node.end
   };
-}
-
-async function loadPkiStudioCore(): Promise<PkiStudioCoreModule> {
-  const imported = await import('@pkistudio/pkistudiojs/core');
-  return ('default' in imported ? imported.default : imported) as PkiStudioCoreModule;
 }
 
 function normalizeTagClass(value: string | number | undefined): TlvTagClass {
@@ -73,22 +67,9 @@ function decodeOidFromNode(node: PkiStudioLikeNode): string | undefined {
   if ((node.tagNumber ?? node.tag) !== 6) return undefined;
   const bytes = normalizeBytes(node.valueBytes ?? node.contentBytes);
   if (!bytes || bytes.length === 0) return undefined;
-  return decodeOid(bytes);
+  return pkistudioCore.decodeOid(bytes);
 }
 
-function decodeOid(bytes: Uint8Array): string | undefined {
-  const values: number[] = [];
-  let current = 0;
-  for (const byte of bytes) {
-    current = current * 128 + (byte & 0x7f);
-    if ((byte & 0x80) === 0) {
-      values.push(current);
-      current = 0;
-    }
-  }
-  if (values.length === 0) return undefined;
-  const first = values[0];
-  const firstArc = first < 40 ? 0 : first < 80 ? 1 : 2;
-  const secondArc = first - firstArc * 40;
-  return [firstArc, secondArc, ...values.slice(1)].join('.');
+function resolveOidName(oid: string): string | undefined {
+  return oidResolver.resolve(oid) || undefined;
 }

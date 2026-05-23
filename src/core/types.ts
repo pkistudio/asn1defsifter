@@ -28,6 +28,7 @@ export interface TlvNode {
   encodedBytes?: Uint8Array;
   value?: unknown;
   oid?: string;
+  oidName?: string;
   children?: TlvNode[];
   start?: number;
   end?: number;
@@ -41,6 +42,7 @@ export interface TlvFeatures {
   childCount: number;
   childTagSequence: string[];
   oidValues: string[];
+  oidNames: string[];
   primitiveValueKind?: string;
   valueLength?: number;
 }

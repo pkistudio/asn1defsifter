@@ -13,11 +13,13 @@ describe('parseInputToTlvNodes', () => {
     expect(node.children?.[0]).toMatchObject({
       tagClass: 'universal',
       tagNumber: 6,
-      oid: '1.2.840.113549.1.1.11'
+      oid: '1.2.840.113549.1.1.11',
+      oidName: 'SHA256 with RSA Encryption'
     });
 
     const candidates = findAsn1Candidates(node, { schemaCorpus: createPkiComponentCorpus(), maxResults: 3 });
     expect(candidates[0].typeName).toBe('AlgorithmIdentifier');
     expect(candidates[0].evidence).toContain('Node matches objectIdentifier with value 1.2.840.113549.1.1.11.');
+    expect(candidates[0].evidence).toContain('OID 1.2.840.113549.1.1.11 resolves to SHA256 with RSA Encryption.');
   });
 });
