@@ -19,6 +19,18 @@ describe('createCandidateReport', () => {
       typeName: 'AlgorithmIdentifier',
       confidence: 'high'
     });
+    expect(report.roots[0].summary).toMatchObject({
+      candidateCount: 3,
+      bestCandidate: {
+        typeName: 'AlgorithmIdentifier',
+        confidence: 'high'
+      },
+      diagnosticCounts: {
+        info: 0,
+        warning: expect.any(Number),
+        error: expect.any(Number)
+      }
+    });
     expect(report.roots[0].hypotheses[0]).toMatchObject({
       rootType: 'AlgorithmIdentifier',
       confidence: 'high'
@@ -37,5 +49,6 @@ describe('createCandidateReport', () => {
       typeName: 'AlgorithmIdentifier',
       confidence: 'high'
     });
+    expect(report.roots[0].summary.bestCandidate?.typeName).toBe('AlgorithmIdentifier');
   });
 });

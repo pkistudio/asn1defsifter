@@ -143,8 +143,25 @@ export interface CandidateReportRoot {
   index: number;
   node?: TlvNode;
   features: TlvFeatures;
+  summary: CandidateReportSummary;
   candidates: Candidate[];
   hypotheses: DocumentHypothesis[];
+  diagnostics: Diagnostic[];
+  ambiguities: string[];
+}
+
+export interface CandidateReportSummary {
+  candidateCount: number;
+  bestCandidate?: CandidateReportCandidateSummary;
+  diagnosticCounts: Record<DiagnosticSeverity, number>;
+  ambiguityCount: number;
+}
+
+export interface CandidateReportCandidateSummary {
+  typeName: string;
+  moduleName?: string;
+  score: number;
+  confidence: CandidateConfidence;
 }
 
 export interface CandidateReport {

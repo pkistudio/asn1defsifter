@@ -67,6 +67,8 @@ console.log(report.roots[0].candidates[0]);
 
 Use `createCandidateReportFromNodes(nodes)` when a host already has neutral TLV nodes and should not parse the input again.
 
+Each report root includes `summary`, `features`, `candidates`, `hypotheses`, aggregated `diagnostics`, and aggregated `ambiguities`.
+
 ## Relationship To PkiStudio Projects
 
 PkiStudioJS remains the low-level DER/BER/PEM/base64/HEX parser, serializer, viewer, and DER re-encoder. ASN.1 Instance Builder remains the schema-aware definition parser, validator, and DER builder.
