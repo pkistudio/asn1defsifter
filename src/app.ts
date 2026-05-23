@@ -306,7 +306,6 @@ function createRootCandidateNode(candidate: Candidate, root: CandidateReportRoot
     hasChildren: subtrees.length > 0
   });
   bindSummarySelection(summary, () => selectCandidate(createRootSelection(candidate, root, sourceBytes), summary));
-  attachChildAlternativeMenu(summary, subtrees, selectedSubtreeCandidates, selectCandidate);
   details.append(summary);
   if (subtrees.length > 0) {
     const list = document.createElement('div');
@@ -336,32 +335,18 @@ function createSubtreeNode(node: SubtreeDisplayNode, selectedSubtreeCandidates: 
   const selectedCandidate = getSelectedSubtreeCandidate(subtree, selectedSubtreeCandidates);
   const details = document.createElement('details');
   details.className = 'ads-tree-node ads-subtree-node';
-  details.dataset.subtreePath = subtree.path;
   const summary = createSummary(formatCandidateName(selectedCandidate), `${subtree.path} · ${formatScore(selectedCandidate.score)} · ${selectedCandidate.confidence}`, {
     hasChildren: node.children.length > 0
   });
-  bindSummarySelection(summary, () => selectCandidate(createSubtreeSelection(getSelectedSubtreeCandidate(subtree, selectedSubtreeCandidates), subtree), summary));
-  attachChildAlternativeMenu(summary, node.children, selectedSubtreeCandidates, selectCandidate);
-  details.append(summary);
-  const list = document.createElement('div');
-  list.className = 'ads-tree-children';
-  for (const child of node.children) list.append(createSubtreeNode(child, selectedSubtreeCandidates, selectCandidate));
-  details.append(list);
-  return details;
-}
-
-function attachChildAlternativeMenu(summary: HTMLElement, childNodes: SubtreeDisplayNode[], selectedSubtreeCandidates: Map<string, string>, selectCandidate: (selection: CandidateSelection, selectedElement: HTMLElement) => void): void {
-  if (childNodes.length === 0) return;
-  const childNode = childNodes[0];
-  const alternatives = createAlternativeList(childNode.subtree, selectedSubtreeCandidates, (candidate, selectedElement) => {
-    selectedSubtreeCandidates.set(childNode.subtree.path, candidateKey(candidate));
-    const childSummary = summary.parentElement?.querySelector<HTMLElement>(`:scope > .ads-tree-children > .ads-subtree-node[data-subtree-path="${cssEscape(childNode.subtree.path)}"] > summary`);
-    if (childSummary) updateSummary(childSummary, formatCandidateName(candidate), `${childNode.subtree.path} · ${formatScore(candidate.score)} · ${candidate.confidence}`);
+  bindSummarySelection(summary, () => selectCandidate(createSubtreeSelection(selectedCandidate, subtree), summary));
+  const icon = summary.querySelector<HTMLElement>('.ads-tree-icon');
+  const alternatives = createAlternativeList(subtree, selectedSubtreeCandidates, (candidate, selectedElement) => {
+    selectedSubtreeCandidates.set(subtree.path, candidateKey(candidate));
+    updateSummary(summary, formatCandidateName(candidate), `${subtree.path} · ${formatScore(candidate.score)} · ${candidate.confidence}`);
     updateAlternativeChecks(alternatives, candidate);
     alternatives.hidden = true;
-    selectCandidate(createSubtreeSelection(candidate, childNode.subtree), selectedElement);
+    selectCandidate(createSubtreeSelection(candidate, subtree), selectedElement);
   });
-  const icon = summary.querySelector<HTMLElement>(':scope > .ads-tree-icon');
   icon?.addEventListener('click', (event) => {
     event.preventDefault();
     event.stopPropagation();
@@ -370,6 +355,12 @@ function attachChildAlternativeMenu(summary: HTMLElement, childNodes: SubtreeDis
     alternatives.hidden = !shouldShow;
   });
   summary.append(alternatives);
+  details.append(summary);
+  const list = document.createElement('div');
+  list.className = 'ads-tree-children';
+  for (const child of node.children) list.append(createSubtreeNode(child, selectedSubtreeCandidates, selectCandidate));
+  details.append(list);
+  return details;
 }
 
 function createAlternativeList(subtree: CandidateReportSubtree, selectedSubtreeCandidates: Map<string, string>, selectAlternative: (candidate: Candidate, selectedElement: HTMLElement) => void): HTMLElement {
@@ -379,10 +370,6 @@ function createAlternativeList(subtree: CandidateReportSubtree, selectedSubtreeC
   list.hidden = true;
   for (const candidate of sortCandidatesByScore(subtree.candidates)) list.append(createCandidateNode(candidate, subtree, selectedSubtreeCandidates, selectAlternative));
   return list;
-}
-
-function cssEscape(value: string): string {
-  return CSS.escape(value);
 }
 
 function createCandidateNode(candidate: Candidate, subtree: CandidateReportSubtree, selectedSubtreeCandidates: Map<string, string>, selectAlternative: (candidate: Candidate, selectedElement: HTMLElement) => void): HTMLElement {
