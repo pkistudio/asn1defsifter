@@ -3,6 +3,8 @@ import PkiStudio from '@pkistudio/pkistudiojs/viewer';
 import PkiStudioOidResolver from '@pkistudio/pkistudiojs/oid-resolver';
 import { clampScore, confidenceFromScore, createPkiCandidateReport, type Candidate, type CandidateConfidence, type CandidateReport, type CandidateReportRoot, type CandidateReportSubtree, type TlvNode } from './core/index.js';
 
+declare const __ASN1_DEFINITION_SIFTER_VERSION__: string;
+
 type ViewerRoot = DocumentFragment | Element;
 
 export type AppTheme = 'light' | 'dark';
@@ -83,52 +85,50 @@ const DEFAULT_HEX_SOURCE = 'clipboard.hex';
 const DEFAULT_APP_MIN_WIDTH = 640;
 const EMBEDDED_VIEWER_SURFACE_STYLES = `
 :host {
-  --window: transparent !important;
-  --panel: rgb(255 255 255 / 58%) !important;
-  --panel-border: rgb(185 196 208 / 0%) !important;
-  --chrome-start: rgb(255 255 255 / 60%) !important;
-  --chrome: rgb(238 243 248 / 42%) !important;
-  --subtle-border: rgb(214 222 230 / 54%) !important;
+  min-height: 0 !important;
+  width: 100% !important;
+  height: 100%;
+  overflow: hidden !important;
+  background: transparent !important;
 }
 
-@media (prefers-color-scheme: dark) {
-  :host {
-    --window: transparent !important;
-    --panel: rgb(37 43 52 / 46%) !important;
-    --panel-border: rgb(79 90 104 / 0%) !important;
-    --chrome-start: rgb(48 55 67 / 50%) !important;
-    --chrome: rgb(37 44 54 / 34%) !important;
-    --subtle-border: rgb(119 132 150 / 34%) !important;
-  }
-}
-
-:host([data-pkistudio-theme="dark"]) {
-  --window: transparent !important;
-  --panel: rgb(37 43 52 / 46%) !important;
-  --panel-border: rgb(79 90 104 / 0%) !important;
-  --chrome-start: rgb(48 55 67 / 50%) !important;
-  --chrome: rgb(37 44 54 / 34%) !important;
-  --subtle-border: rgb(119 132 150 / 34%) !important;
-}
-
-.menu,
-.card {
-  box-shadow: none !important;
+main {
+  display: flex;
+  flex-direction: column;
+  width: 100% !important;
+  height: 100%;
+  min-height: 0;
+  margin: 0 !important;
+  padding: 0 !important;
 }
 
 .menu {
-  border: 1px solid var(--subtle-border) !important;
-  border-radius: 3px !important;
-  background: linear-gradient(var(--chrome-start), var(--chrome)) !important;
+  position: relative !important;
+  flex: 0 0 auto;
+  border-radius: 3px 3px 0 0 !important;
 }
 
 .card {
-  border: 0 !important;
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: 6px;
+  min-height: 0;
+  border-right: 0 !important;
+  border-left: 0 !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
+  overflow: hidden !important;
 }
 
-.card,
+.picker {
+  display: none !important;
+}
+
 .viewer {
-  background: transparent !important;
+  flex: 1 1 auto;
+  min-height: 0 !important;
+  max-height: none !important;
 }
 
 .node-context-menu,
@@ -210,10 +210,11 @@ export function initAsn1DefinitionSifter(options: Asn1DefinitionSifterAppOptions
       <dialog id="adsAboutDialog" class="ads-about-dialog">
         <section class="ads-about-panel">
           <div>
-            <div class="ads-about-name">ASN.1 Definition Sifter</div>
-            <div class="ads-about-module">@pkistudio/asn1defsifter</div>
+            <p class="ads-about-name">ASN.1 Definition Sifter</p>
+            <p class="ads-about-version">Version ${__ASN1_DEFINITION_SIFTER_VERSION__}</p>
+            <p class="ads-about-detail">PkiStudioJS ${(PkiStudio as PkiStudioViewerApi).version ?? 'viewer'} embedded ASN.1 viewer</p>
           </div>
-          <p>Rank ASN.1 definition candidates for DER and TLV fragments with explainable evidence.</p>
+          <p class="ads-about-description">Rank ASN.1 definition candidates for DER and TLV fragments with explainable evidence.</p>
           <form method="dialog">
             <button id="adsCloseAboutButton" type="button">Close</button>
           </form>

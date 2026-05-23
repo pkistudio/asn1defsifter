@@ -4,7 +4,7 @@ ASN.1 Definition Sifter is an explainable candidate resolver for ASN.1 data. It 
 
 It does not try to magically identify one globally unique ASN.1 definition from DER bytes alone. DER does not preserve field names, type names, module names, comments, or many other schema-level semantics. This package instead provides deterministic local matches that higher-level tools and AI agents can use when building ASN.1 type hypotheses.
 
-Current version: 0.1.2
+Current version: 0.1.3
 
 Hosted viewer: https://pkistudio.github.io/asn1defsifter/
 
