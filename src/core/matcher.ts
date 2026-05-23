@@ -39,7 +39,7 @@ function matchTypeInternal(node: TlvNode, type: Asn1Type, state: MatchState, sch
 
   if (type.kind === 'tagged') return matchTagged(node, type, state, schemaPath, nodePath);
   if (type.kind === 'sequence') return matchSequence(node, type.fields, state, schemaPath, nodePath, 16, 'SEQUENCE');
-  if (type.kind === 'set') return matchSequence(node, type.fields, state, schemaPath, nodePath, 17, 'SET');
+  if (type.kind === 'set') return matchSet(node, type.fields, state, schemaPath, nodePath);
   if (type.kind === 'choice') return matchChoice(node, type.alternatives, state, schemaPath, nodePath);
   if (type.kind === 'sequenceOf') return matchCollection(node, type.elementType, state, schemaPath, nodePath, 16, 'SEQUENCE OF');
   if (type.kind === 'setOf') return matchCollection(node, type.elementType, state, schemaPath, nodePath, 17, 'SET OF');
@@ -56,7 +56,11 @@ function matchPrimitive(node: TlvNode, kind: string, state: MatchState, schemaPa
     addDiagnostic(state, 'error', nodePath, `Expected ${kind}, found ${describeFound(node)}.`);
     return 0;
   }
-  addEvidence(state, nodePath, `Node matches ${kind}.`);
+  if (kind === 'objectIdentifier' && node.oid) {
+    addEvidence(state, nodePath, `Node matches objectIdentifier with value ${node.oid}.`);
+  } else {
+    addEvidence(state, nodePath, `Node matches ${kind}.`);
+  }
   addMatchedPath(state, nodePath, schemaPath);
   return node.constructed ? 0.7 : 1;
 }
@@ -139,6 +143,58 @@ function matchField(children: TlvNode[], childIndex: number, field: Asn1Field, s
   return { nextIndex: childIndex, score };
 }
 
+function matchSet(node: TlvNode, fields: Asn1Field[], state: MatchState, schemaPath: string, nodePath: string): number {
+  if (node.tagClass !== 'universal' || node.tagNumber !== 17 || !node.constructed) {
+    addDiagnostic(state, 'error', nodePath, `Expected SET, found ${describeFound(node)}.`);
+    return 0;
+  }
+
+  const children = node.children ?? [];
+  const unusedChildIndexes = new Set(children.map((_child, index) => index));
+  let totalScore = 0;
+  let scoreSlots = 0;
+  addEvidence(state, nodePath, 'Root node matches SET.');
+  addMatchedPath(state, nodePath, schemaPath);
+
+  for (const field of fields) {
+    let bestMatch: { childIndex: number; branchState: MatchState; score: number } | undefined;
+    for (const childIndex of unusedChildIndexes) {
+      const branchState = createBranchState(state.schema);
+      const score = matchTypeInternal(children[childIndex], field.type, branchState, `${schemaPath}.${field.name}`, `${nodePath}.${childIndex}`);
+      if (score > 0 && (!bestMatch || score > bestMatch.score)) {
+        bestMatch = { childIndex, branchState, score };
+      }
+    }
+
+    if (bestMatch) {
+      unusedChildIndexes.delete(bestMatch.childIndex);
+      mergeBranchState(state, bestMatch.branchState);
+      addEvidence(state, `${nodePath}.${bestMatch.childIndex}`, `SET field ${field.name} is compatible with this child node.`);
+      totalScore += bestMatch.score;
+      scoreSlots += 1;
+      continue;
+    }
+
+    if (field.optional || field.defaultValue !== undefined) {
+      addEvidence(state, nodePath, `SET field ${field.name} is absent and allowed by OPTIONAL or DEFAULT.`);
+      totalScore += 0.75;
+      scoreSlots += 1;
+      continue;
+    }
+
+    addDiagnostic(state, 'error', `${schemaPath}.${field.name}`, `Required SET field ${field.name} is missing.`);
+    scoreSlots += 1;
+  }
+
+  if (unusedChildIndexes.size > 0) {
+    addDiagnostic(state, 'warning', nodePath, `${unusedChildIndexes.size} unexpected child node(s) remain after matching SET.`);
+  }
+
+  const fieldScore = scoreSlots === 0 ? 0.85 : totalScore / scoreSlots;
+  const completenessPenalty = unusedChildIndexes.size > 0 ? 0.85 : 1;
+  return (0.25 + 0.75 * fieldScore) * completenessPenalty;
+}
+
 function matchChoice(node: TlvNode, alternatives: Asn1Field[], state: MatchState, schemaPath: string, nodePath: string): number {
   const scored = alternatives
     .map((alternative) => {
@@ -193,6 +249,17 @@ function addDiagnostic(state: MatchState, severity: Diagnostic['severity'], path
 
 function addMatchedPath(state: MatchState, nodePath: string, schemaPath: string): void {
   state.matchedPaths.push({ nodePath, schemaPath });
+}
+
+function createBranchState(schema: Asn1SchemaModule): MatchState {
+  return { schema, evidence: [], diagnostics: [], ambiguities: [], matchedPaths: [] };
+}
+
+function mergeBranchState(state: MatchState, branchState: MatchState): void {
+  state.evidence.push(...branchState.evidence);
+  state.diagnostics.push(...branchState.diagnostics.filter((diagnostic) => diagnostic.severity !== 'error'));
+  state.ambiguities.push(...branchState.ambiguities);
+  state.matchedPaths.push(...branchState.matchedPaths);
 }
 
 function describeFound(node: TlvNode): string {

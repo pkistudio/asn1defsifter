@@ -23,7 +23,8 @@
     }
   },
   "scripts": {
-    "build": "npm run build:types && npm run build:lib",
+    "clean": "node -e \"require('node:fs').rmSync('dist',{recursive:true,force:true})\"",
+    "build": "npm run clean && npm run build:types && npm run build:lib",
     "build:lib": "vite build",
     "build:types": "tsc -p tsconfig.types.json",
     "check": "tsc --noEmit",
