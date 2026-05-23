@@ -54,6 +54,8 @@ Use `parseAsn1DefinitionCorpus(source)` when you want to match against your own 
 
 Pass `minScore` when callers should suppress weak candidates and their diagnostics from candidate lists and reports.
 
+Use `includeTypes` and `excludeTypes` to limit candidate matching by type name. Values can be local names such as `SubjectPublicKeyInfo` or qualified names such as `PkiComponents.SubjectPublicKeyInfo`.
+
 For agent or workbench integrations, `createCandidateReport()` wraps parsing, feature extraction, candidate ranking, and document hypotheses into one JSON-friendly result:
 
 ```ts

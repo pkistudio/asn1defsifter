@@ -3,7 +3,7 @@ import { createPkiComponentCorpus } from '../corpus/pki-components.js';
 import { findAsn1Candidates } from '../core/candidates.js';
 import { identifyAsn1Document } from '../core/document.js';
 import { extractDerFeatures } from '../core/features.js';
-import type { Candidate, CandidateReport, CandidateReportOptions, CandidateReportSubtree, CandidateReportSummary, Diagnostic, DiagnosticSeverity, SchemaCorpusInput, TlvNode } from '../core/types.js';
+import type { Candidate, CandidateReport, CandidateReportOptions, CandidateReportSubtree, CandidateReportSummary, Diagnostic, DiagnosticSeverity, TlvNode } from '../core/types.js';
 
 export async function createCandidateReport(input: unknown, options: CandidateReportOptions = {}): Promise<CandidateReport> {
   const nodes = await parseInputToTlvNodes(input, options.parseOptions);
@@ -14,23 +14,30 @@ export function createCandidateReportFromNodes(nodes: TlvNode | TlvNode[], optio
   const schemaCorpus = options.schemaCorpus ?? createPkiComponentCorpus();
   const maxResults = options.maxResults ?? 10;
   const minScore = options.minScore;
+  const candidateOptions = {
+    schemaCorpus,
+    maxResults,
+    minScore,
+    includeTypes: options.includeTypes,
+    excludeTypes: options.excludeTypes
+  };
   const rootNodes = Array.isArray(nodes) ? nodes : [nodes];
   return {
     roots: rootNodes.map((node, index) => {
-      const matchReport = createNodeMatchReport(node, schemaCorpus, maxResults, minScore);
+      const matchReport = createNodeMatchReport(node, candidateOptions);
       return {
         index,
         ...(options.includeNodes ? { node } : {}),
         ...matchReport,
-        hypotheses: identifyAsn1Document(node, { schemaCorpus, maxResults, minScore }),
-        ...(options.includeSubtrees ? { subtrees: createSubtreeReports(node, schemaCorpus, maxResults, minScore, options) } : {})
+        hypotheses: identifyAsn1Document(node, candidateOptions),
+        ...(options.includeSubtrees ? { subtrees: createSubtreeReports(node, candidateOptions, options) } : {})
       };
     })
   };
 }
 
-function createNodeMatchReport(node: TlvNode, schemaCorpus: SchemaCorpusInput, maxResults: number, minScore?: number): Omit<CandidateReportSubtree, 'path' | 'node'> {
-  const candidates = findAsn1Candidates(node, { schemaCorpus, maxResults, minScore });
+function createNodeMatchReport(node: TlvNode, candidateOptions: Parameters<typeof findAsn1Candidates>[1]): Omit<CandidateReportSubtree, 'path' | 'node'> {
+  const candidates = findAsn1Candidates(node, candidateOptions);
   const diagnostics = uniqueDiagnostics(candidates.flatMap((candidate) => candidate.diagnostics));
   const ambiguities = [...new Set(candidates.flatMap((candidate) => candidate.ambiguities))];
   return {
@@ -42,14 +49,14 @@ function createNodeMatchReport(node: TlvNode, schemaCorpus: SchemaCorpusInput, m
   };
 }
 
-function createSubtreeReports(node: TlvNode, schemaCorpus: SchemaCorpusInput, maxResults: number, minScore: number | undefined, options: CandidateReportOptions): CandidateReportSubtree[] {
+function createSubtreeReports(node: TlvNode, candidateOptions: Parameters<typeof findAsn1Candidates>[1], options: CandidateReportOptions): CandidateReportSubtree[] {
   const maxDepth = options.maxSubtreeDepth ?? 3;
   const maxReports = options.maxSubtreeReports ?? 20;
   const reports: CandidateReportSubtree[] = [];
   visitSubtrees(node, '$', 0, maxDepth, maxReports, reports, (child, path) => ({
     path,
     ...(options.includeNodes ? { node: child } : {}),
-    ...createNodeMatchReport(child, schemaCorpus, maxResults, minScore)
+    ...createNodeMatchReport(child, candidateOptions)
   }));
   return reports;
 }

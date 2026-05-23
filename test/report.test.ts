@@ -90,4 +90,18 @@ describe('createCandidateReport', () => {
     expect(report.roots[0].candidates.every((candidate) => candidate.score >= 0.9)).toBe(true);
     expect(report.roots[0].subtrees?.[0].candidates.every((candidate) => candidate.score >= 0.9)).toBe(true);
   });
+
+  it('applies type filters to root and subtree reports', () => {
+    const node = sequence([sequence([oid('1.2.840.113549.1.1.1'), nullNode()]), bitString()]);
+    const report = createCandidateReportFromNodes(node, {
+      includeSubtrees: true,
+      maxSubtreeDepth: 1,
+      maxResults: 5,
+      minScore: 0.9,
+      includeTypes: ['SubjectPublicKeyInfo', 'AlgorithmIdentifier']
+    });
+
+    expect(report.roots[0].candidates.map((candidate) => candidate.typeName)).toEqual(['SubjectPublicKeyInfo']);
+    expect(report.roots[0].subtrees?.[0].candidates.map((candidate) => candidate.typeName)).toEqual(['AlgorithmIdentifier']);
+  });
 });

@@ -82,6 +82,8 @@ export interface CandidateOptions {
   schemaCorpus: SchemaCorpusInput;
   maxResults?: number;
   minScore?: number;
+  includeTypes?: string[];
+  excludeTypes?: string[];
   context?: CandidateContext;
 }
 
@@ -137,6 +139,8 @@ export interface CandidateReportOptions {
   schemaCorpus?: SchemaCorpusInput;
   maxResults?: number;
   minScore?: number;
+  includeTypes?: string[];
+  excludeTypes?: string[];
   parseOptions?: Record<string, unknown>;
   includeNodes?: boolean;
   includeSubtrees?: boolean;

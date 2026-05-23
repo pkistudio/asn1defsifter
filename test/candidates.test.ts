@@ -52,6 +52,15 @@ describe('findAsn1Candidates', () => {
     expect(candidates.map((candidate) => candidate.typeName)).toEqual(['Person']);
   });
 
+  it('can include and exclude candidate types by local or qualified name', () => {
+    const node = sequence([sequence([oid('1.2.840.113549.1.1.1'), nullNode()]), bitString()]);
+    const included = findAsn1Candidates(node, { schemaCorpus: corpus, includeTypes: ['PkiComponents.SubjectPublicKeyInfo'] });
+    const excluded = findAsn1Candidates(node, { schemaCorpus: corpus, excludeTypes: ['SubjectPublicKeyInfo'] });
+
+    expect(included.map((candidate) => candidate.typeName)).toEqual(['SubjectPublicKeyInfo']);
+    expect(excluded.map((candidate) => candidate.typeName)).not.toContain('SubjectPublicKeyInfo');
+  });
+
   it('matches SET fields without requiring schema order', () => {
     const node = set([oid('2.5.4.3'), utf8String('Example CA')]);
     const candidates = findAsn1Candidates(node, { schemaCorpus: setCorpus });
