@@ -277,7 +277,12 @@ function createRootCandidateNode(candidate: Candidate, root: CandidateReportRoot
   const summary = createSummary(formatCandidateName(candidate), `Root ${root.index} · ${formatScore(candidate.score)} · ${candidate.confidence}`);
   summary.addEventListener('click', () => selectCandidate({ candidate, context: `Root ${root.index}` }, summary));
   details.append(summary);
-  if (subtrees.length > 0) details.append(createSubtreeGroup(subtrees, selectCandidate));
+  if (subtrees.length > 0) {
+    const list = document.createElement('div');
+    list.className = 'ads-tree-children';
+    for (const subtree of subtrees) list.append(createSubtreeNode(subtree, selectCandidate));
+    details.append(list);
+  }
   return details;
 }
 
@@ -329,17 +334,6 @@ function renderSelectedCandidate(container: HTMLElement, summary: HTMLElement, s
   container.append(createKeyValue('Diagnostics', candidate.diagnostics.slice(0, 8).map((diagnostic) => `${diagnostic.severity}: ${diagnostic.message}`).join('\n') || 'No diagnostics.'));
   container.append(createKeyValue('Ambiguities', candidate.ambiguities.slice(0, 8).join('\n') || 'No ambiguities.'));
   container.append(createKeyValue('Matched paths', candidate.matchedPaths.slice(0, 12).map((path) => `${path.nodePath} -> ${path.schemaPath}`).join('\n') || 'No matched paths.'));
-}
-
-function createSubtreeGroup(subtrees: CandidateReportSubtree[], selectCandidate: (selection: CandidateSelection, selectedElement: HTMLElement) => void): HTMLElement {
-  const details = document.createElement('details');
-  details.className = 'ads-tree-node ads-subtree-group';
-  details.append(createSummary('Subtree candidates', `${subtrees.length} subtree report(s)`));
-  const list = document.createElement('div');
-  list.className = 'ads-tree-children';
-  for (const subtree of subtrees) list.append(createSubtreeNode(subtree, selectCandidate));
-  details.append(list);
-  return details;
 }
 
 function createSummary(label: string, note: string): HTMLElement {
