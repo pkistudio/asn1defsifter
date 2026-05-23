@@ -379,7 +379,7 @@ function createCandidateNode(candidate: Candidate, subtree: CandidateReportSubtr
   item.setAttribute('role', 'menuitemradio');
   item.dataset.candidateKey = candidateKey(candidate);
   item.setAttribute('aria-checked', candidateKey(candidate) === candidateKey(getSelectedSubtreeCandidate(subtree, selectedSubtreeCandidates)) ? 'true' : 'false');
-  item.append(createDisclosure(false), createTreeIcon('leaf'), createTreeLabel(formatCandidateName(candidate)), createTreeNote(`${formatScore(candidate.score)} · ${candidate.confidence}`));
+  item.append(createTreeLabel(formatCandidateName(candidate)), createTreeNote(formatScore(candidate.score)));
   item.prepend(createCheckmark(candidateKey(candidate) === candidateKey(getSelectedSubtreeCandidate(subtree, selectedSubtreeCandidates))));
   item.addEventListener('click', (event) => {
     event.preventDefault();
