@@ -341,6 +341,62 @@ This would allow a UI to connect:
 - decoded instance JSON paths,
 - diagnostics.
 
+## Standalone Viewer App
+
+Although the package should remain usable as a headless resolver library, the project should also include a small standalone viewer app so the module can be exercised and demonstrated without embedding it into another PkiStudio surface first.
+
+The viewer is a development and verification surface, not the primary runtime contract. The resolver core should remain UI-independent, browser-first, and reusable by PkiStudioJS, VS Code extensions, or other workbench layers.
+
+### Layout
+
+The app should use a three-pane layout:
+
+- left pane: input loading and DER hex display,
+- right pane: candidate tree view,
+- bottom pane: API log output.
+
+The left and right panes should each have a main content area and a lower notification area. The bottom pane should behave like the API log area in ASN.1 Instance Builder, showing resolver calls, options, timings, warnings, and errors in chronological order.
+
+### Left Pane
+
+The left pane should provide a `Load` menu with these actions:
+
+- `from File`: load ASN.1 input from a local file,
+- `from Clipboard as HEX`: read clipboard text as hexadecimal DER input.
+
+After loading, the left pane content area should show the loaded DER binary as formatted hexadecimal data. The lower notification area should show input-related messages such as load success, parse errors, byte length, detected input format, and clipboard validation errors.
+
+### Right Pane
+
+The right pane content area should show candidate results as a tree view. The top level should represent loaded root TLV nodes or document hypotheses. Child levels should expose subtree candidate reports so users can inspect candidates for nested TLV fragments.
+
+Each tree item should be able to show at least:
+
+- candidate type name and module name,
+- score and confidence,
+- matched TLV path and schema path,
+- evidence, diagnostics, and ambiguity summaries,
+- child subtree candidates when available.
+
+The right pane lower notification area should show candidate-resolution messages such as selected candidate details, filtered candidate counts, empty-result notices, and subtree traversal limits.
+
+### Viewer Flow
+
+The first viewer milestone should support this flow:
+
+1. Load DER bytes from a file or clipboard HEX.
+2. Parse the input with PkiStudioJS through the adapter.
+3. Render the input bytes as formatted hex in the left pane.
+4. Run `createPkiCandidateReport()` with subtree reports enabled.
+5. Render root and subtree candidates in the right pane tree.
+6. Append parse, match, report, warning, and error events to the bottom API log.
+
+### Implementation Boundary
+
+The viewer should consume public APIs from this package instead of reaching into private matcher internals. Any missing data needed by the viewer should be added to the resolver report types first, then rendered by the app.
+
+The app can live inside the same repository for module verification, but it should not make the core resolver depend on UI frameworks, DOM APIs, VS Code APIs, or host-specific file systems.
+
 ## Initial Scope
 
 The first version should use a focused schema corpus instead of trying to cover every ASN.1 definition.
@@ -476,6 +532,7 @@ It does not try to magically identify one unique ASN.1 definition from DER bytes
 6. Add recursive matching for encapsulated BIT STRING and OCTET STRING values.
 7. Add annotated tree generation.
 8. Add an agent-friendly JSON report format.
+9. Add a standalone viewer app for loading DER input, inspecting hex bytes, viewing candidate trees, and checking API logs.
 
 ## Open Design Questions
 
