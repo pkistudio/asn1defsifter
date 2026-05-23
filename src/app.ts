@@ -540,11 +540,13 @@ function getSelectedSubtreeCandidate(subtree: CandidateReportSubtree, selectedSu
 }
 
 function calculateRootDisplayScore(candidate: Candidate, subtrees: SubtreeDisplayNode[], selectedSubtreeCandidates: Map<string, string>): number {
+  if (!hasSelectedSubtree(subtrees, selectedSubtreeCandidates)) return candidate.score;
   return calculateDisplayScore(candidate.score, collectChildDisplayScores(subtrees, selectedSubtreeCandidates));
 }
 
 function calculateSubtreeDisplayScore(node: SubtreeDisplayNode, selectedSubtreeCandidates: Map<string, string>, candidate = getSelectedSubtreeCandidate(node.subtree, selectedSubtreeCandidates)): number | undefined {
   if (!candidate) return undefined;
+  if (!hasSelectedSubtree(node.children, selectedSubtreeCandidates)) return candidate.score;
   return calculateDisplayScore(candidate.score, collectChildDisplayScores(node.children, selectedSubtreeCandidates));
 }
 
@@ -559,6 +561,10 @@ function calculateDisplayScore(baseScore: number, childScores: number[]): number
   if (childScores.length === 0) return baseScore;
   const total = childScores.reduce((sum, score) => sum + score, baseScore);
   return clampScore(total / (childScores.length + 1));
+}
+
+function hasSelectedSubtree(nodes: SubtreeDisplayNode[], selectedSubtreeCandidates: Map<string, string>): boolean {
+  return nodes.some((node) => selectedSubtreeCandidates.has(node.subtree.path) || hasSelectedSubtree(node.children, selectedSubtreeCandidates));
 }
 
 function findTreeSummary(kind: 'root' | 'subtree', pathOrIndex: string, key: string): HTMLElement | undefined {
