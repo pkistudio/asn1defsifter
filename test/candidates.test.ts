@@ -1,0 +1,40 @@
+import { describe, expect, it } from 'vitest';
+import { findAsn1Candidates, parseAsn1DefinitionCorpus } from '../src/core';
+import { bitString, nullNode, oid, sequence, utf8String } from './fixtures';
+
+const corpus = parseAsn1DefinitionCorpus(`PkiComponents DEFINITIONS EXPLICIT TAGS ::= BEGIN
+AlgorithmIdentifier ::= SEQUENCE {
+  algorithm OBJECT IDENTIFIER,
+  parameters NULL OPTIONAL
+}
+SubjectPublicKeyInfo ::= SEQUENCE {
+  algorithm AlgorithmIdentifier,
+  subjectPublicKey BIT STRING
+}
+Person ::= SEQUENCE {
+  name UTF8String
+}
+END`);
+
+describe('findAsn1Candidates', () => {
+  it('ranks compatible ASN.1 type definitions with evidence', () => {
+    const node = sequence([sequence([oid('1.2.840.113549.1.1.1'), nullNode()]), bitString()]);
+    const candidates = findAsn1Candidates(node, { schemaCorpus: corpus });
+
+    expect(candidates[0]).toMatchObject({
+      typeName: 'SubjectPublicKeyInfo',
+      moduleName: 'PkiComponents',
+      confidence: 'high'
+    });
+    expect(candidates[0].score).toBeGreaterThan(0.8);
+    expect(candidates[0].evidence.some((message) => message.includes('SEQUENCE'))).toBe(true);
+  });
+
+  it('keeps structurally weaker candidates below stronger matches', () => {
+    const node = sequence([utf8String('Alice')]);
+    const candidates = findAsn1Candidates(node, { schemaCorpus: corpus });
+
+    expect(candidates[0].typeName).toBe('Person');
+    expect(candidates.find((candidate) => candidate.typeName === 'SubjectPublicKeyInfo')?.score ?? 0).toBeLessThan(candidates[0].score);
+  });
+});

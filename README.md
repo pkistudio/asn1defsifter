@@ -1,1 +1,93 @@
-# asn1defsifter
+# ASN.1 Definition Sifter
+
+ASN.1 Definition Sifter is an explainable candidate resolver for ASN.1 data. It compares DER/TLV fragments with a corpus of ASN.1 definitions and returns ranked ASN.1 type candidates with scores, evidence, diagnostics, and ambiguity notes.
+
+It does not try to magically identify one globally unique ASN.1 definition from DER bytes alone. DER does not preserve field names, type names, module names, comments, or many other schema-level semantics. This package instead provides deterministic local matches that higher-level tools and AI agents can use when building ASN.1 type hypotheses.
+
+Current version: 0.1.0
+
+## Features
+
+- Neutral TLV node model for resolver core inputs.
+- Structural feature extraction for tag class, tag number, constructed state, child tag sequence, OID values, and primitive value kind.
+- ASN.1 Schema Model matching through `@pkistudio/asn1instancebuilder` definitions.
+- Candidate ranking with numeric scores, confidence labels, evidence, diagnostics, ambiguity notes, and matched node/schema paths.
+- PkiStudioJS adapter for parsing supported ASN.1 inputs into resolver-ready TLV nodes.
+- Document hypothesis helper with annotated tree output.
+
+## Install
+
+```sh
+npm install @pkistudio/asn1defsifter
+```
+
+Package exports:
+
+- `@pkistudio/asn1defsifter`: Core API.
+- `@pkistudio/asn1defsifter/core`: Core API alias.
+
+## Core API
+
+```ts
+import { findAsn1Candidates, parseAsn1DefinitionCorpus, parseInputToTlvNodes } from '@pkistudio/asn1defsifter';
+
+const corpus = parseAsn1DefinitionCorpus(`Example DEFINITIONS ::= BEGIN
+AlgorithmIdentifier ::= SEQUENCE {
+	algorithm OBJECT IDENTIFIER,
+	parameters NULL OPTIONAL
+}
+END`);
+
+const [node] = await parseInputToTlvNodes('300d06092a864886f70d01010b0500', { format: 'hex' });
+const candidates = findAsn1Candidates(node, { schemaCorpus: corpus, maxResults: 5 });
+
+console.log(candidates[0]);
+```
+
+Candidate results include:
+
+- `typeName` and optional `moduleName`.
+- `score` from `0` to `1`.
+- `confidence` as `low`, `medium`, or `high`.
+- Human-readable `evidence`.
+- `diagnostics` explaining mismatches or weaker matches.
+- `ambiguities` for structurally plausible alternatives.
+- `matchedPaths` connecting TLV node paths to schema paths.
+
+## Relationship To PkiStudio Projects
+
+PkiStudioJS remains the low-level DER/BER/PEM/base64/HEX parser, serializer, viewer, and DER re-encoder. ASN.1 Instance Builder remains the schema-aware definition parser, validator, and DER builder.
+
+ASN.1 Definition Sifter sits between them:
+
+```text
+PkiStudioJS
+	DER/TLV parsing and encoding
+
+ASN.1 Instance Builder
+	ASN.1 definition parsing and schema model
+
+ASN.1 Definition Sifter
+	DER/TLV fragment -> ranked ASN.1 definition candidates
+```
+
+## Development
+
+Run local checks with:
+
+```sh
+npm run check
+npm test
+npm run build
+```
+
+For package or release-related changes, also run:
+
+```sh
+npm run pack:dry-run
+```
+
+## License
+
+ASN.1 Definition Sifter is licensed under the MIT License. See [LICENSE](LICENSE).
+ 
