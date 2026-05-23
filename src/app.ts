@@ -238,21 +238,35 @@ function renderCandidateTree(container: HTMLElement, report: CandidateReport): v
     return;
   }
   for (const root of report.roots) {
-    container.append(createRootTree(root));
+    const subtrees = sortSubtreesByBestScore(root.subtrees ?? []);
+    for (const candidate of sortCandidatesByScore(root.candidates)) {
+      container.append(createRootCandidateNode(candidate, root, subtrees));
+    }
+    if (root.candidates.length === 0) container.append(createEmptyRootNode(root, subtrees));
   }
 }
 
-function createRootTree(root: CandidateReportRoot): HTMLElement {
+function createRootCandidateNode(candidate: Candidate, root: CandidateReportRoot, subtrees: CandidateReportSubtree[]): HTMLElement {
+  const details = document.createElement('details');
+  details.className = 'ads-tree-node ads-candidate-node';
+  details.append(createSummary(formatCandidateName(candidate), `Root ${root.index} · ${formatScore(candidate.score)} · ${candidate.confidence}`));
+  const body = createCandidateDetail(candidate);
+  if (subtrees.length > 0) body.append(createSubtreeGroup(subtrees));
+  details.append(body);
+  return details;
+}
+
+function createEmptyRootNode(root: CandidateReportRoot, subtrees: CandidateReportSubtree[]): HTMLElement {
   const details = document.createElement('details');
   details.className = 'ads-tree-node';
   details.open = true;
-  const best = root.summary.bestCandidate;
-  details.append(createSummary(`Root ${root.index}`, best ? `${formatCandidateName(best)} · ${formatScore(best.score)} · ${best.confidence}` : `${root.summary.candidateCount} candidate(s)`));
-  const list = document.createElement('div');
-  list.className = 'ads-tree-children';
-  for (const candidate of root.candidates) list.append(createCandidateNode(candidate));
-  for (const subtree of root.subtrees ?? []) list.append(createSubtreeNode(subtree));
-  details.append(list);
+  details.append(createSummary(`Root ${root.index}`, 'No candidates'));
+  if (subtrees.length > 0) {
+    const list = document.createElement('div');
+    list.className = 'ads-tree-children';
+    for (const subtree of subtrees) list.append(createSubtreeNode(subtree));
+    details.append(list);
+  }
   return details;
 }
 
@@ -263,7 +277,7 @@ function createSubtreeNode(subtree: CandidateReportSubtree): HTMLElement {
   details.append(createSummary(`Subtree ${subtree.path}`, best ? `${formatCandidateName(best)} · ${formatScore(best.score)} · ${best.confidence}` : `${subtree.summary.candidateCount} candidate(s)`));
   const list = document.createElement('div');
   list.className = 'ads-tree-children';
-  for (const candidate of subtree.candidates) list.append(createCandidateNode(candidate));
+  for (const candidate of sortCandidatesByScore(subtree.candidates)) list.append(createCandidateNode(candidate));
   details.append(list);
   return details;
 }
@@ -272,13 +286,28 @@ function createCandidateNode(candidate: Candidate): HTMLElement {
   const details = document.createElement('details');
   details.className = 'ads-tree-node ads-candidate-node';
   details.append(createSummary(formatCandidateName(candidate), `${formatScore(candidate.score)} · ${candidate.confidence}`));
+  details.append(createCandidateDetail(candidate));
+  return details;
+}
+
+function createCandidateDetail(candidate: Candidate): HTMLElement {
   const body = document.createElement('div');
   body.className = 'ads-candidate-detail';
   body.append(createKeyValue('Evidence', candidate.evidence.slice(0, 5).join('\n') || 'No evidence.'));
   body.append(createKeyValue('Diagnostics', candidate.diagnostics.slice(0, 5).map((diagnostic) => `${diagnostic.severity}: ${diagnostic.message}`).join('\n') || 'No diagnostics.'));
   body.append(createKeyValue('Ambiguities', candidate.ambiguities.slice(0, 5).join('\n') || 'No ambiguities.'));
   body.append(createKeyValue('Matched paths', candidate.matchedPaths.slice(0, 8).map((path) => `${path.nodePath} -> ${path.schemaPath}`).join('\n') || 'No matched paths.'));
-  details.append(body);
+  return body;
+}
+
+function createSubtreeGroup(subtrees: CandidateReportSubtree[]): HTMLElement {
+  const details = document.createElement('details');
+  details.className = 'ads-tree-node ads-subtree-group';
+  details.append(createSummary('Subtree candidates', `${subtrees.length} subtree report(s)`));
+  const list = document.createElement('div');
+  list.className = 'ads-tree-children';
+  for (const subtree of subtrees) list.append(createSubtreeNode(subtree));
+  details.append(list);
   return details;
 }
 
@@ -354,7 +383,19 @@ function formatCandidateName(candidate: Pick<Candidate, 'typeName' | 'moduleName
 }
 
 function formatScore(score: number): string {
-  return score.toFixed(2);
+  return `${Math.round(score * 100)}%`;
+}
+
+function sortCandidatesByScore(candidates: Candidate[]): Candidate[] {
+  return [...candidates].sort((left, right) => right.score - left.score || formatCandidateName(left).localeCompare(formatCandidateName(right)));
+}
+
+function sortSubtreesByBestScore(subtrees: CandidateReportSubtree[]): CandidateReportSubtree[] {
+  return [...subtrees].sort((left, right) => getBestSubtreeScore(right) - getBestSubtreeScore(left) || left.path.localeCompare(right.path));
+}
+
+function getBestSubtreeScore(subtree: CandidateReportSubtree): number {
+  return Math.max(...subtree.candidates.map((candidate) => candidate.score), 0);
 }
 
 function formatDuration(startedAt: number): string {
