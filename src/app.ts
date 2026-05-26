@@ -89,10 +89,23 @@ type ManagedCorpus = {
   builtin: boolean;
 };
 
+type SavedCorporaFile = {
+  version: 1;
+  corpora: SavedCorpusEntry[];
+};
+
+type SavedCorpusEntry = {
+  name: string;
+  sourceName?: string;
+  sourceText: string;
+  builtin?: boolean;
+};
+
 const MAX_LOG_ENTRIES = 80;
 const DEFAULT_HEX_SOURCE = 'clipboard.hex';
 const DEFAULT_APP_MIN_WIDTH = 640;
 const BUILTIN_CORPUS_ID = 'builtin-pki-components';
+const DEFAULT_CORPORA_FILENAME = 'corpora.json';
 const EMBEDDED_VIEWER_SURFACE_STYLES = `
 :host {
   min-height: 0 !important;
@@ -240,7 +253,11 @@ export function initAsn1DefinitionSifter(options: Asn1DefinitionSifterAppOptions
               <p class="ads-corpora-name">Corpora</p>
               <p class="ads-corpora-detail">Manage the ASN.1 definition corpora used for candidate resolution.</p>
             </div>
-            <button id="adsCloseCorporaButton" type="button" aria-label="Close Corpora">Close</button>
+            <div class="ads-corpora-header-actions">
+              <button id="adsLoadCorporaButton" type="button">Load</button>
+              <button id="adsSaveCorporaButton" type="button">Save</button>
+              <button id="adsCloseCorporaButton" type="button" aria-label="Close Corpora">Close</button>
+            </div>
           </header>
           <div class="ads-corpora-actions">
             <div class="ads-corpus-add">
@@ -255,6 +272,7 @@ export function initAsn1DefinitionSifter(options: Asn1DefinitionSifterAppOptions
           <div id="adsCorpusList" class="ads-corpus-list" aria-label="Managed corpora"></div>
           <p id="adsCorpusStatus" class="ads-corpus-status" role="status"></p>
           <input id="adsCorpusFileInput" type="file" accept=".asn,.asn1,.txt,text/plain" hidden>
+          <input id="adsCorporaJsonFileInput" type="file" accept=".json,application/json" hidden>
         </section>
       </dialog>
       <dialog id="adsCorpusEditDialog" class="ads-corpus-edit-dialog">
@@ -289,6 +307,8 @@ export function initAsn1DefinitionSifter(options: Asn1DefinitionSifterAppOptions
   const aboutDialog = getElement<HTMLDialogElement>(app, '#adsAboutDialog');
   const closeAboutButton = getElement<HTMLButtonElement>(app, '#adsCloseAboutButton');
   const corporaDialog = getElement<HTMLDialogElement>(app, '#adsCorporaDialog');
+  const loadCorporaButton = getElement<HTMLButtonElement>(app, '#adsLoadCorporaButton');
+  const saveCorporaButton = getElement<HTMLButtonElement>(app, '#adsSaveCorporaButton');
   const closeCorporaButton = getElement<HTMLButtonElement>(app, '#adsCloseCorporaButton');
   const addCorpusButton = getElement<HTMLButtonElement>(app, '#adsAddCorpusButton');
   const addCorpusMenu = getElement<HTMLElement>(app, '#adsAddCorpusMenu');
@@ -298,6 +318,7 @@ export function initAsn1DefinitionSifter(options: Asn1DefinitionSifterAppOptions
   const corpusList = getElement<HTMLElement>(app, '#adsCorpusList');
   const corpusStatus = getElement<HTMLElement>(app, '#adsCorpusStatus');
   const corpusFileInput = getElement<HTMLInputElement>(app, '#adsCorpusFileInput');
+  const corporaJsonFileInput = getElement<HTMLInputElement>(app, '#adsCorporaJsonFileInput');
   const corpusEditDialog = getElement<HTMLDialogElement>(app, '#adsCorpusEditDialog');
   const corpusEditForm = getElement<HTMLFormElement>(app, '#adsCorpusEditForm');
   const corpusEditTitle = getElement<HTMLElement>(app, '#adsCorpusEditTitle');
@@ -484,6 +505,40 @@ export function initAsn1DefinitionSifter(options: Asn1DefinitionSifterAppOptions
   });
 
   closeCorporaButton.addEventListener('click', () => corporaDialog.close());
+
+  saveCorporaButton.addEventListener('click', () => {
+    try {
+      downloadText(DEFAULT_CORPORA_FILENAME, JSON.stringify(createSavedCorporaFile(state.corpora), null, 2));
+      setCorpusStatus(`Saved ${state.corpora.length} corpus/corpora to ${DEFAULT_CORPORA_FILENAME}.`, 'success');
+      addLog('success', 'corpora.save', `${DEFAULT_CORPORA_FILENAME}: ${state.corpora.length} corpus/corpora.`);
+    } catch (error) {
+      const message = getErrorMessage(error);
+      setCorpusStatus(message, 'error');
+      addLog('error', 'corpora.save failed', message);
+    }
+  });
+
+  loadCorporaButton.addEventListener('click', () => {
+    corporaJsonFileInput.value = '';
+    corporaJsonFileInput.click();
+  });
+
+  corporaJsonFileInput.addEventListener('change', () => {
+    const file = corporaJsonFileInput.files?.[0];
+    if (!file) return;
+    void file.text().then(async (text) => {
+      const corpora = parseSavedCorporaFile(text, file.name);
+      state.corpora = corpora;
+      refreshCorporaView();
+      setCorpusStatus(`Loaded ${corpora.length} corpus/corpora from ${file.name}.`, 'success');
+      addLog('success', 'corpora.load', `${file.name}: ${corpora.length} corpus/corpora.`);
+      await refreshCandidateReport(`Corpora were loaded from ${file.name}; refreshing candidates.`);
+    }).catch((error) => {
+      const message = getErrorMessage(error);
+      setCorpusStatus(message, 'error');
+      addLog('error', 'corpora.load failed', message);
+    });
+  });
 
   addCorpusButton.addEventListener('click', (event) => {
     event.preventDefault();
@@ -682,6 +737,65 @@ function renameSchemaCorpusModules(corpus: SchemaCorpus, name: string): SchemaCo
       name
     }))
   };
+}
+
+function createSavedCorporaFile(corpora: ManagedCorpus[]): SavedCorporaFile {
+  return {
+    version: 1,
+    corpora: corpora.map((entry) => ({
+      name: entry.name,
+      sourceName: entry.sourceName,
+      sourceText: entry.sourceText,
+      builtin: entry.builtin
+    }))
+  };
+}
+
+function parseSavedCorporaFile(text: string, sourceName: string): ManagedCorpus[] {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(text);
+  } catch (error) {
+    throw new Error(`Could not parse ${sourceName} as JSON: ${getErrorMessage(error)}`);
+  }
+  if (!isRecord(parsed) || parsed.version !== 1 || !Array.isArray(parsed.corpora)) {
+    throw new Error(`${sourceName} is not a supported corpora JSON file.`);
+  }
+  const corpora: ManagedCorpus[] = [];
+  for (const [index, entry] of parsed.corpora.entries()) {
+    if (!isRecord(entry)) throw new Error(`Corpus entry ${index + 1} is not an object.`);
+    const name = typeof entry.name === 'string' ? entry.name.trim() : '';
+    const sourceText = typeof entry.sourceText === 'string' ? entry.sourceText : '';
+    const entrySourceName = typeof entry.sourceName === 'string' && entry.sourceName.trim() ? entry.sourceName.trim() : sourceName;
+    if (!name) throw new Error(`Corpus entry ${index + 1} is missing a name.`);
+    if (!sourceText.trim()) throw new Error(`Corpus ${name} is missing ASN.1 definitions.`);
+    assertUniqueCorpusName(corpora, name);
+    corpora.push({
+      id: createCorpusId(),
+      name,
+      sourceName: entrySourceName,
+      sourceText,
+      corpus: createManagedSchemaCorpus(name, sourceText),
+      builtin: Boolean(entry.builtin)
+    });
+  }
+  return corpora;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null;
+}
+
+function downloadText(fileName: string, text: string): void {
+  const url = URL.createObjectURL(new Blob([text], { type: 'application/json' }));
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = fileName;
+  link.style.display = 'none';
+  document.body.append(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
 }
 
 function renderCorpusList(container: HTMLElement, corpora: ManagedCorpus[], actions: { edit: (id: string) => void; remove: (id: string) => void }): void {

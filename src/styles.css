@@ -739,6 +739,13 @@ details[open] > summary > .ads-disclosure::before {
   align-items: start;
 }
 
+.ads-corpora-header-actions {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  justify-content: flex-end;
+}
+
 .ads-corpora-name {
   margin: 0;
   font-weight: 700;
