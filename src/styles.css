@@ -686,8 +686,9 @@ details[open] > summary > .ads-disclosure::before {
   outline: none;
 }
 
-.ads-about-dialog {
-  width: min(380px, calc(100% - 32px));
+.ads-about-dialog,
+.ads-corpora-dialog,
+.ads-corpus-edit-dialog {
   margin: auto;
   border: 0;
   padding: 0;
@@ -695,11 +696,27 @@ details[open] > summary > .ads-disclosure::before {
   background: transparent;
 }
 
-.ads-about-dialog::backdrop {
+.ads-about-dialog {
+  width: min(380px, calc(100% - 32px));
+}
+
+.ads-corpora-dialog {
+  width: min(720px, calc(100% - 32px));
+}
+
+.ads-corpus-edit-dialog {
+  width: min(860px, calc(100% - 32px));
+}
+
+.ads-about-dialog::backdrop,
+.ads-corpora-dialog::backdrop,
+.ads-corpus-edit-dialog::backdrop {
   background: rgb(15 23 42 / 28%);
 }
 
-.ads-about-panel {
+.ads-about-panel,
+.ads-corpora-panel,
+.ads-corpus-edit-panel {
   display: grid;
   gap: 8px;
   border: 1px solid var(--ads-panel-border);
@@ -707,6 +724,176 @@ details[open] > summary > .ads-disclosure::before {
   padding: 14px;
   background: var(--ads-dialog-panel);
   box-shadow: var(--ads-shadow-dialog);
+}
+
+.ads-corpora-panel,
+.ads-corpus-edit-panel {
+  max-height: min(82vh, 720px);
+  overflow: hidden;
+}
+
+.ads-corpora-header {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: start;
+}
+
+.ads-corpora-header-actions {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  justify-content: flex-end;
+}
+
+.ads-corpora-name {
+  margin: 0;
+  font-weight: 700;
+  font-size: 16px;
+}
+
+.ads-corpora-detail {
+  margin: 2px 0 0;
+  color: var(--ads-muted);
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.ads-corpora-actions {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  justify-content: flex-start;
+}
+
+.ads-corpus-add {
+  position: relative;
+}
+
+.ads-corpus-add-menu {
+  position: absolute;
+  top: calc(100% + 2px);
+  left: 0;
+  z-index: 30;
+  display: grid;
+  min-width: 150px;
+  border: 1px solid var(--ads-panel-border);
+  border-radius: 3px;
+  padding: 4px;
+  background: var(--ads-panel);
+  box-shadow: 0 8px 18px rgb(30 41 59 / 16%);
+}
+
+.ads-corpus-add-menu[hidden] {
+  display: none;
+}
+
+.ads-corpus-add-menu button {
+  justify-content: flex-start;
+  width: 100%;
+  text-align: left;
+}
+
+.ads-corpus-list {
+  display: grid;
+  gap: 6px;
+  min-height: 0;
+  max-height: 320px;
+  overflow: auto;
+  border: 1px solid var(--ads-subtle-border);
+  border-radius: 3px;
+  padding: 6px;
+  background: var(--ads-content);
+}
+
+.ads-corpus-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: center;
+  border: 1px solid var(--ads-subtle-border);
+  border-radius: 3px;
+  padding: 7px;
+  background: var(--ads-card);
+}
+
+.ads-corpus-row-summary {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.ads-corpus-row-summary strong,
+.ads-corpus-row-summary span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ads-corpus-row-summary span {
+  color: var(--ads-muted);
+  font-size: 12px;
+}
+
+.ads-corpus-row-actions,
+.ads-corpus-edit-actions {
+  display: flex;
+  gap: 6px;
+  justify-content: flex-end;
+}
+
+.ads-corpus-empty,
+.ads-corpus-status {
+  margin: 0;
+  color: var(--ads-muted);
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.ads-corpus-status[data-level="success"] {
+  color: #1f6f43;
+}
+
+.ads-corpus-status[data-level="warning"] {
+  color: #806000;
+}
+
+.ads-corpus-status[data-level="error"] {
+  color: var(--ads-danger);
+}
+
+.ads-corpus-field {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+  color: var(--ads-muted);
+  font-size: 12px;
+}
+
+.ads-corpus-field input,
+.ads-corpus-field textarea {
+  width: 100%;
+  min-width: 0;
+  border: 1px solid var(--ads-control-border);
+  border-radius: 3px;
+  padding: 6px 8px;
+  color: var(--ads-text);
+  background: var(--ads-content);
+  font: inherit;
+}
+
+.ads-corpus-field textarea {
+  min-height: 360px;
+  resize: vertical;
+  font-family: Consolas, "Courier New", monospace;
+  font-size: 12px;
+  line-height: 1.45;
+  white-space: pre;
+  overflow: auto;
+}
+
+.ads-corpus-source-field {
+  min-height: 0;
 }
 
 .ads-about-description {
