@@ -1,7 +1,7 @@
 import './styles.css';
 import PkiStudio from '@pkistudio/pkistudiojs/viewer';
 import PkiStudioOidResolver from '@pkistudio/pkistudiojs/oid-resolver';
-import { clampScore, confidenceFromScore, createPkiCandidateReport, type Candidate, type CandidateConfidence, type CandidateReport, type CandidateReportRoot, type CandidateReportSubtree, type TlvNode } from './core/index.js';
+import { clampScore, confidenceFromScore, createCandidateReport, createPkiComponentCorpus, parseAsn1DefinitionCorpus, pkiComponentDefinition, type Candidate, type CandidateConfidence, type CandidateReport, type CandidateReportRoot, type CandidateReportSubtree, type SchemaCorpus, type TlvNode } from './core/index.js';
 
 declare const __ASN1_DEFINITION_SIFTER_VERSION__: string;
 
@@ -80,9 +80,19 @@ type SubtreeDisplayNode = {
   children: SubtreeDisplayNode[];
 };
 
+type ManagedCorpus = {
+  id: string;
+  name: string;
+  sourceName: string;
+  sourceText: string;
+  corpus: SchemaCorpus;
+  builtin: boolean;
+};
+
 const MAX_LOG_ENTRIES = 80;
 const DEFAULT_HEX_SOURCE = 'clipboard.hex';
 const DEFAULT_APP_MIN_WIDTH = 640;
+const BUILTIN_CORPUS_ID = 'builtin-pki-components';
 const EMBEDDED_VIEWER_SURFACE_STYLES = `
 :host {
   min-height: 0 !important;
@@ -161,11 +171,13 @@ declare global {
 
 export function initAsn1DefinitionSifter(options: Asn1DefinitionSifterAppOptions = {}): Asn1DefinitionSifterAppInstance {
   const app = resolveMount(options.mount ?? '#app');
-  const state: { report: CandidateReport | null; sourceName: string | null; bytes: Uint8Array | null; logs: LogEntry[]; selectedRootCandidates: Map<number, string>; selectedSubtreeCandidates: Map<string, string>; selectedSelection?: CandidateSelection } = {
+  const initialCorpora = createInitialCorpora();
+  const state: { report: CandidateReport | null; sourceName: string | null; bytes: Uint8Array | null; logs: LogEntry[]; corpora: ManagedCorpus[]; selectedRootCandidates: Map<number, string>; selectedSubtreeCandidates: Map<string, string>; selectedSelection?: CandidateSelection; editingCorpusId?: string } = {
     report: null,
     sourceName: null,
     bytes: null,
     logs: [],
+    corpora: cloneManagedCorpora(initialCorpora),
     selectedRootCandidates: new Map(),
     selectedSubtreeCandidates: new Map()
   };
@@ -174,6 +186,7 @@ export function initAsn1DefinitionSifter(options: Asn1DefinitionSifterAppOptions
     <main class="ads-shell" data-theme="${options.theme ?? 'light'}">
       <nav class="ads-toolbar" aria-label="Application toolbar">
         <strong>ASN.1 Definition Sifter</strong>
+        <button id="adsCorporaButton" type="button">Corpora</button>
         <button id="adsAboutButton" type="button">About</button>
       </nav>
       <section class="ads-workspace" aria-label="ASN.1 Definition Sifter workspace">
@@ -220,12 +233,79 @@ export function initAsn1DefinitionSifter(options: Asn1DefinitionSifterAppOptions
           </form>
         </section>
       </dialog>
+      <dialog id="adsCorporaDialog" class="ads-corpora-dialog">
+        <section class="ads-corpora-panel">
+          <header class="ads-corpora-header">
+            <div>
+              <p class="ads-corpora-name">Corpora</p>
+              <p class="ads-corpora-detail">Manage the ASN.1 definition corpora used for candidate resolution.</p>
+            </div>
+            <button id="adsCloseCorporaButton" type="button" aria-label="Close Corpora">Close</button>
+          </header>
+          <div class="ads-corpora-actions">
+            <div class="ads-corpus-add">
+              <button id="adsAddCorpusButton" type="button" aria-haspopup="true" aria-expanded="false">Add</button>
+              <div id="adsAddCorpusMenu" class="ads-corpus-add-menu" role="menu" hidden>
+                <button id="adsAddCorpusFromFileButton" type="button" role="menuitem">from File</button>
+                <button id="adsAddCorpusFromClipboardButton" type="button" role="menuitem">from Clipboard</button>
+              </div>
+            </div>
+            <button id="adsRevertCorporaButton" type="button">Revert</button>
+          </div>
+          <div id="adsCorpusList" class="ads-corpus-list" aria-label="Managed corpora"></div>
+          <p id="adsCorpusStatus" class="ads-corpus-status" role="status"></p>
+          <input id="adsCorpusFileInput" type="file" accept=".asn,.asn1,.txt,text/plain" hidden>
+        </section>
+      </dialog>
+      <dialog id="adsCorpusEditDialog" class="ads-corpus-edit-dialog">
+        <form id="adsCorpusEditForm" class="ads-corpus-edit-panel" method="dialog">
+          <header class="ads-corpora-header">
+            <div>
+              <p id="adsCorpusEditTitle" class="ads-corpora-name">Edit Corpus</p>
+              <p class="ads-corpora-detail">Save validates the ASN.1 definitions before applying them.</p>
+            </div>
+            <button id="adsCancelCorpusEditHeaderButton" type="button" aria-label="Cancel editing">Close</button>
+          </header>
+          <label class="ads-corpus-field">
+            <span>Name</span>
+            <input id="adsCorpusNameInput" type="text" required>
+          </label>
+          <label class="ads-corpus-field ads-corpus-source-field">
+            <span>ASN.1 definitions</span>
+            <textarea id="adsCorpusSourceInput" spellcheck="false" required></textarea>
+          </label>
+          <p id="adsCorpusEditStatus" class="ads-corpus-status" role="status"></p>
+          <footer class="ads-corpus-edit-actions">
+            <button id="adsCancelCorpusEditButton" type="button">Cancel</button>
+            <button id="adsSaveCorpusEditButton" type="submit">Save</button>
+          </footer>
+        </form>
+      </dialog>
     </main>
   `;
 
+  const corporaButton = getElement<HTMLButtonElement>(app, '#adsCorporaButton');
   const aboutButton = getElement<HTMLButtonElement>(app, '#adsAboutButton');
   const aboutDialog = getElement<HTMLDialogElement>(app, '#adsAboutDialog');
   const closeAboutButton = getElement<HTMLButtonElement>(app, '#adsCloseAboutButton');
+  const corporaDialog = getElement<HTMLDialogElement>(app, '#adsCorporaDialog');
+  const closeCorporaButton = getElement<HTMLButtonElement>(app, '#adsCloseCorporaButton');
+  const addCorpusButton = getElement<HTMLButtonElement>(app, '#adsAddCorpusButton');
+  const addCorpusMenu = getElement<HTMLElement>(app, '#adsAddCorpusMenu');
+  const addCorpusFromFileButton = getElement<HTMLButtonElement>(app, '#adsAddCorpusFromFileButton');
+  const addCorpusFromClipboardButton = getElement<HTMLButtonElement>(app, '#adsAddCorpusFromClipboardButton');
+  const revertCorporaButton = getElement<HTMLButtonElement>(app, '#adsRevertCorporaButton');
+  const corpusList = getElement<HTMLElement>(app, '#adsCorpusList');
+  const corpusStatus = getElement<HTMLElement>(app, '#adsCorpusStatus');
+  const corpusFileInput = getElement<HTMLInputElement>(app, '#adsCorpusFileInput');
+  const corpusEditDialog = getElement<HTMLDialogElement>(app, '#adsCorpusEditDialog');
+  const corpusEditForm = getElement<HTMLFormElement>(app, '#adsCorpusEditForm');
+  const corpusEditTitle = getElement<HTMLElement>(app, '#adsCorpusEditTitle');
+  const corpusNameInput = getElement<HTMLInputElement>(app, '#adsCorpusNameInput');
+  const corpusSourceInput = getElement<HTMLTextAreaElement>(app, '#adsCorpusSourceInput');
+  const corpusEditStatus = getElement<HTMLElement>(app, '#adsCorpusEditStatus');
+  const cancelCorpusEditHeaderButton = getElement<HTMLButtonElement>(app, '#adsCancelCorpusEditHeaderButton');
+  const cancelCorpusEditButton = getElement<HTMLButtonElement>(app, '#adsCancelCorpusEditButton');
   const clearLogButton = getElement<HTMLButtonElement>(app, '#adsClearLogButton');
   const inputViewerMount = getElement<HTMLElement>(app, '#adsInputViewer');
   if (options.theme) inputViewerMount.setAttribute('data-pkistudio-theme', options.theme);
@@ -276,6 +356,40 @@ export function initAsn1DefinitionSifter(options: Asn1DefinitionSifterAppOptions
     scheduleAppMinimumWidthUpdate(shell, candidateDetail);
   };
 
+  const refreshCandidateReport = async (reason: string): Promise<void> => {
+    if (!state.bytes) return;
+    addLog('info', 'corpora.refresh', reason);
+    await loadBytes(state.bytes, state.sourceName ?? 'input.der', false);
+  };
+
+  const setCorpusStatus = (message: string, level: LogLevel = 'info'): void => {
+    corpusStatus.textContent = message;
+    corpusStatus.dataset.level = level;
+  };
+
+  const setCorpusEditStatus = (message: string, level: LogLevel = 'info'): void => {
+    corpusEditStatus.textContent = message;
+    corpusEditStatus.dataset.level = level;
+  };
+
+  const refreshCorporaView = (): void => {
+    renderCorpusList(corpusList, state.corpora, {
+      edit: openCorpusEditDialog,
+      remove: (id) => {
+        const corpus = state.corpora.find((entry) => entry.id === id);
+        if (!corpus) return;
+        state.corpora = state.corpora.filter((entry) => entry.id !== id);
+        refreshCorporaView();
+        setCorpusStatus(`Removed ${corpus.name}.`, 'success');
+        addLog('success', 'corpus.remove', `${corpus.name}: removed from active corpora.`);
+        void refreshCandidateReport(`Corpus ${corpus.name} was removed; refreshing candidates.`);
+      }
+    });
+    const moduleCount = state.corpora.reduce((sum, entry) => sum + entry.corpus.modules.length, 0);
+    const typeCount = state.corpora.reduce((sum, entry) => sum + countCorpusTypes(entry), 0);
+    setCandidateNotice(state.bytes ? `Using ${state.corpora.length} corpus/corpora with ${moduleCount} module(s) and ${typeCount} type(s).` : 'Candidate results will appear after input is loaded.');
+  };
+
   copySelectedCandidateButton.addEventListener('click', () => {
     if (!state.selectedSelection) return;
     const payload = createSelectedCandidateCopyPayload(state.selectedSelection, state.sourceName);
@@ -295,7 +409,8 @@ export function initAsn1DefinitionSifter(options: Asn1DefinitionSifterAppOptions
     }
     addLog('info', 'loadBytes', `${sourceName}: ${bytes.byteLength} bytes`);
     try {
-      const report = await createPkiCandidateReport(bytes, {
+      const report = await createCandidateReport(bytes, {
+        schemaCorpus: mergeManagedCorpora(state.corpora),
         includeSubtrees: true,
         includeEmptySubtrees: true,
         includeNodes: true,
@@ -313,8 +428,8 @@ export function initAsn1DefinitionSifter(options: Asn1DefinitionSifterAppOptions
       const rootCount = report.roots.length;
       const candidateCount = report.roots.reduce((sum, root) => sum + root.candidates.length, 0);
       const subtreeCount = report.roots.reduce((sum, root) => sum + (root.subtrees?.length ?? 0), 0);
-      setCandidateNotice(`Resolved ${candidateCount} root candidate(s) across ${rootCount} root node(s); ${subtreeCount} subtree report(s).`);
-      addLog('success', 'createPkiCandidateReport', `Completed in ${formatDuration(startedAt)} with ${candidateCount} root candidate(s).`);
+      setCandidateNotice(`Resolved ${candidateCount} root candidate(s) across ${rootCount} root node(s); ${subtreeCount} subtree report(s) using ${state.corpora.length} corpus/corpora.`);
+      addLog('success', 'createCandidateReport', `Completed in ${formatDuration(startedAt)} with ${candidateCount} root candidate(s) using ${state.corpora.length} corpus/corpora.`);
       logCandidateReportDetails(report, addLog);
     } catch (error) {
       state.report = null;
@@ -322,7 +437,7 @@ export function initAsn1DefinitionSifter(options: Asn1DefinitionSifterAppOptions
       renderSelectedCandidateView();
       const message = getErrorMessage(error);
       setCandidateNotice(message);
-      addLog('error', 'createPkiCandidateReport failed', message);
+      addLog('error', 'createCandidateReport failed', message);
     }
   };
 
@@ -362,6 +477,90 @@ export function initAsn1DefinitionSifter(options: Asn1DefinitionSifterAppOptions
 
   closeAboutButton.addEventListener('click', () => aboutDialog.close());
 
+  corporaButton.addEventListener('click', () => {
+    refreshCorporaView();
+    setCorpusStatus(`${state.corpora.length} corpus/corpora active.`);
+    showDialog(corporaDialog);
+  });
+
+  closeCorporaButton.addEventListener('click', () => corporaDialog.close());
+
+  addCorpusButton.addEventListener('click', (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    const shouldShow = addCorpusMenu.hidden;
+    closeCorpusAddMenu();
+    addCorpusMenu.hidden = !shouldShow;
+    addCorpusButton.setAttribute('aria-expanded', String(shouldShow));
+  });
+
+  addCorpusFromFileButton.addEventListener('click', () => {
+    closeCorpusAddMenu();
+    corpusFileInput.value = '';
+    corpusFileInput.click();
+  });
+
+  corpusFileInput.addEventListener('change', () => {
+    const file = corpusFileInput.files?.[0];
+    if (!file) return;
+    void file.text().then((sourceText) => addCorpusFromSource(file.name.replace(/\.[^.]+$/, '') || file.name, file.name, sourceText)).catch((error) => {
+      const message = getErrorMessage(error);
+      setCorpusStatus(message, 'error');
+      addLog('error', 'corpus.addFile failed', message);
+    });
+  });
+
+  addCorpusFromClipboardButton.addEventListener('click', () => {
+    closeCorpusAddMenu();
+    void readClipboardText().then((sourceText) => addCorpusFromSource('Clipboard Corpus', 'Clipboard', sourceText)).catch((error) => {
+      const message = getErrorMessage(error);
+      setCorpusStatus(message, 'error');
+      addLog('error', 'corpus.addClipboard failed', message);
+    });
+  });
+
+  revertCorporaButton.addEventListener('click', () => {
+    state.corpora = cloneManagedCorpora(initialCorpora);
+    refreshCorporaView();
+    setCorpusStatus('Restored the initial built-in corpora.', 'success');
+    addLog('success', 'corpus.revert', 'Restored built-in PkiComponents corpus and removed session additions.');
+    void refreshCandidateReport('Corpora were reverted; refreshing candidates.');
+  });
+
+  const closeCorpusEditDialog = (): void => {
+    state.editingCorpusId = undefined;
+    corpusEditDialog.close();
+  };
+
+  cancelCorpusEditButton.addEventListener('click', closeCorpusEditDialog);
+  cancelCorpusEditHeaderButton.addEventListener('click', closeCorpusEditDialog);
+
+  corpusEditForm.addEventListener('submit', (event) => {
+    event.preventDefault();
+    const id = state.editingCorpusId;
+    if (!id) return;
+    const current = state.corpora.find((entry) => entry.id === id);
+    if (!current) return;
+    const nextName = corpusNameInput.value.trim();
+    const sourceText = corpusSourceInput.value;
+    try {
+      if (!nextName) throw new Error('Corpus name is required.');
+      assertUniqueCorpusName(state.corpora, nextName, id);
+      const corpus = parseAsn1DefinitionCorpus(sourceText);
+      const nextCorpus = { ...current, name: nextName, sourceText, corpus };
+      state.corpora = state.corpora.map((entry) => entry.id === id ? nextCorpus : entry);
+      refreshCorporaView();
+      setCorpusStatus(`Saved ${nextName}.`, 'success');
+      addLog('success', 'corpus.edit', `${nextName}: ${formatCorpusStats(nextCorpus)}.`);
+      closeCorpusEditDialog();
+      void refreshCandidateReport(`Corpus ${nextName} was edited; refreshing candidates.`);
+    } catch (error) {
+      const message = getErrorMessage(error);
+      setCorpusEditStatus(message, 'error');
+      addLog('error', 'corpus.edit failed', message);
+    }
+  });
+
   clearLogButton.addEventListener('click', () => {
     state.logs = [];
     renderLogs(apiLog, state.logs);
@@ -369,6 +568,7 @@ export function initAsn1DefinitionSifter(options: Asn1DefinitionSifterAppOptions
   const handleDocumentClick = (event: MouseEvent): void => {
     if (!app.contains(event.target as Node)) return;
     if (!(event.target as HTMLElement).closest('.ads-tree-alternatives')) closeAlternativeMenus();
+    if (!(event.target as HTMLElement).closest('.ads-corpus-add')) closeCorpusAddMenu();
   };
   document.addEventListener('click', handleDocumentClick);
 
@@ -390,6 +590,50 @@ export function initAsn1DefinitionSifter(options: Asn1DefinitionSifterAppOptions
   if (inputViewer.root) viewerObserver.observe(inputViewer.root, { childList: true, subtree: true, characterData: true });
 
   addLog('info', 'initAsn1DefinitionSifter', 'Viewer initialized.');
+  refreshCorporaView();
+
+  async function addCorpusFromSource(defaultName: string, sourceName: string, sourceText: string): Promise<void> {
+    const name = defaultName.trim();
+    try {
+      if (!name) throw new Error('Corpus name is required.');
+      assertUniqueCorpusName(state.corpora, name);
+      const corpus = parseAsn1DefinitionCorpus(sourceText);
+      const entry: ManagedCorpus = {
+        id: createCorpusId(),
+        name,
+        sourceName,
+        sourceText,
+        corpus,
+        builtin: false
+      };
+      state.corpora = [...state.corpora, entry];
+      refreshCorporaView();
+      setCorpusStatus(`Added ${name}.`, 'success');
+      addLog('success', 'corpus.add', `${name}: ${formatCorpusStats(entry)} from ${sourceName}.`);
+      await refreshCandidateReport(`Corpus ${name} was added; refreshing candidates.`);
+    } catch (error) {
+      const message = getErrorMessage(error);
+      setCorpusStatus(message, 'error');
+      addLog('error', 'corpus.add failed', message);
+    }
+  }
+
+  function openCorpusEditDialog(id: string): void {
+    const corpus = state.corpora.find((entry) => entry.id === id);
+    if (!corpus) return;
+    state.editingCorpusId = id;
+    corpusEditTitle.textContent = `Edit ${corpus.name}`;
+    corpusNameInput.value = corpus.name;
+    corpusSourceInput.value = corpus.sourceText;
+    setCorpusEditStatus(`${formatCorpusStats(corpus)} from ${corpus.sourceName}.`);
+    showDialog(corpusEditDialog);
+    corpusNameInput.focus();
+  }
+
+  function closeCorpusAddMenu(): void {
+    addCorpusMenu.hidden = true;
+    addCorpusButton.setAttribute('aria-expanded', 'false');
+  }
 
   return {
     get report() {
@@ -406,6 +650,101 @@ export function initAsn1DefinitionSifter(options: Asn1DefinitionSifterAppOptions
 
 if (typeof window !== 'undefined') {
   window.Asn1DefinitionSifter = { init: initAsn1DefinitionSifter };
+}
+
+function createInitialCorpora(): ManagedCorpus[] {
+  return [{
+    id: BUILTIN_CORPUS_ID,
+    name: 'PkiComponents',
+    sourceName: 'Built-in PkiComponents',
+    sourceText: pkiComponentDefinition,
+    corpus: createPkiComponentCorpus(),
+    builtin: true
+  }];
+}
+
+function cloneManagedCorpora(corpora: ManagedCorpus[]): ManagedCorpus[] {
+  return corpora.map((entry) => ({ ...entry }));
+}
+
+function mergeManagedCorpora(corpora: ManagedCorpus[]): SchemaCorpus {
+  return { modules: corpora.flatMap((entry) => entry.corpus.modules) };
+}
+
+function renderCorpusList(container: HTMLElement, corpora: ManagedCorpus[], actions: { edit: (id: string) => void; remove: (id: string) => void }): void {
+  container.innerHTML = '';
+  if (corpora.length === 0) {
+    const empty = document.createElement('p');
+    empty.className = 'ads-corpus-empty';
+    empty.textContent = 'No corpora are active. Revert restores the built-in PkiComponents corpus.';
+    container.append(empty);
+    return;
+  }
+  for (const corpus of corpora) {
+    const row = document.createElement('article');
+    row.className = 'ads-corpus-row';
+
+    const summary = document.createElement('div');
+    summary.className = 'ads-corpus-row-summary';
+    const name = document.createElement('strong');
+    name.textContent = corpus.name;
+    const meta = document.createElement('span');
+    meta.textContent = `${corpus.builtin ? 'Built-in' : 'Custom'} · ${formatCorpusStats(corpus)} · ${corpus.sourceName}`;
+    summary.append(name, meta);
+
+    const buttons = document.createElement('div');
+    buttons.className = 'ads-corpus-row-actions';
+    const editButton = document.createElement('button');
+    editButton.type = 'button';
+    editButton.textContent = 'Edit';
+    editButton.addEventListener('click', () => actions.edit(corpus.id));
+    const removeButton = document.createElement('button');
+    removeButton.type = 'button';
+    removeButton.textContent = 'Remove';
+    removeButton.addEventListener('click', () => actions.remove(corpus.id));
+    buttons.append(editButton, removeButton);
+
+    row.append(summary, buttons);
+    container.append(row);
+  }
+}
+
+function assertUniqueCorpusName(corpora: ManagedCorpus[], name: string, currentId?: string): void {
+  const normalizedName = normalizeCorpusName(name);
+  const duplicate = corpora.find((entry) => entry.id !== currentId && normalizeCorpusName(entry.name) === normalizedName);
+  if (duplicate) throw new Error(`Corpus name "${name}" is already in use.`);
+}
+
+function normalizeCorpusName(name: string): string {
+  return name.trim().toLocaleLowerCase();
+}
+
+function createCorpusId(): string {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') return crypto.randomUUID();
+  return `corpus-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+}
+
+function countCorpusTypes(corpus: ManagedCorpus): number {
+  return corpus.corpus.modules.reduce((sum, module) => sum + module.types.length, 0);
+}
+
+function formatCorpusStats(corpus: ManagedCorpus): string {
+  return `${corpus.corpus.modules.length} module(s), ${countCorpusTypes(corpus)} type(s)`;
+}
+
+function showDialog(dialog: HTMLDialogElement): void {
+  if (typeof dialog.showModal === 'function') {
+    dialog.showModal();
+  } else {
+    dialog.setAttribute('open', '');
+  }
+}
+
+async function readClipboardText(): Promise<string> {
+  if (!navigator.clipboard?.readText) throw new Error('Clipboard read was not available.');
+  const text = await navigator.clipboard.readText();
+  if (text.trim().length === 0) throw new Error('Clipboard does not contain ASN.1 definitions.');
+  return text;
 }
 
 function renderCandidateTree(container: HTMLElement, report: CandidateReport, sourceBytes: Uint8Array, selectedRootCandidates: Map<number, string>, selectedSubtreeCandidates: Map<string, string>, selectCandidate: (selection: CandidateSelection, selectedElement: HTMLElement) => void): void {
