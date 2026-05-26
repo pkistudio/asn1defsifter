@@ -546,7 +546,7 @@ export function initAsn1DefinitionSifter(options: Asn1DefinitionSifterAppOptions
     try {
       if (!nextName) throw new Error('Corpus name is required.');
       assertUniqueCorpusName(state.corpora, nextName, id);
-      const corpus = parseAsn1DefinitionCorpus(sourceText);
+      const corpus = createManagedSchemaCorpus(nextName, sourceText);
       const nextCorpus = { ...current, name: nextName, sourceText, corpus };
       state.corpora = state.corpora.map((entry) => entry.id === id ? nextCorpus : entry);
       refreshCorporaView();
@@ -597,7 +597,7 @@ export function initAsn1DefinitionSifter(options: Asn1DefinitionSifterAppOptions
     try {
       if (!name) throw new Error('Corpus name is required.');
       assertUniqueCorpusName(state.corpora, name);
-      const corpus = parseAsn1DefinitionCorpus(sourceText);
+      const corpus = createManagedSchemaCorpus(name, sourceText);
       const entry: ManagedCorpus = {
         id: createCorpusId(),
         name,
@@ -669,6 +669,19 @@ function cloneManagedCorpora(corpora: ManagedCorpus[]): ManagedCorpus[] {
 
 function mergeManagedCorpora(corpora: ManagedCorpus[]): SchemaCorpus {
   return { modules: corpora.flatMap((entry) => entry.corpus.modules) };
+}
+
+function createManagedSchemaCorpus(name: string, sourceText: string): SchemaCorpus {
+  return renameSchemaCorpusModules(parseAsn1DefinitionCorpus(sourceText), name);
+}
+
+function renameSchemaCorpusModules(corpus: SchemaCorpus, name: string): SchemaCorpus {
+  return {
+    modules: corpus.modules.map((module) => ({
+      ...module,
+      name
+    }))
+  };
 }
 
 function renderCorpusList(container: HTMLElement, corpora: ManagedCorpus[], actions: { edit: (id: string) => void; remove: (id: string) => void }): void {
