@@ -179,6 +179,19 @@ declare global {
     Asn1DefinitionSifter?: {
       init: typeof initAsn1DefinitionSifter;
     };
+    showSaveFilePicker?: (options?: {
+      suggestedName?: string;
+      types?: Array<{
+        description?: string;
+        accept: Record<string, string[]>;
+      }>;
+    }) => Promise<{
+      name: string;
+      createWritable: () => Promise<{
+        write: (data: BlobPart) => Promise<void>;
+        close: () => Promise<void>;
+      }>;
+    }>;
   }
 }
 
@@ -507,15 +520,19 @@ export function initAsn1DefinitionSifter(options: Asn1DefinitionSifterAppOptions
   closeCorporaButton.addEventListener('click', () => corporaDialog.close());
 
   saveCorporaButton.addEventListener('click', () => {
-    try {
-      downloadText(DEFAULT_CORPORA_FILENAME, JSON.stringify(createSavedCorporaFile(state.corpora), null, 2));
-      setCorpusStatus(`Saved ${state.corpora.length} corpus/corpora to ${DEFAULT_CORPORA_FILENAME}.`, 'success');
-      addLog('success', 'corpora.save', `${DEFAULT_CORPORA_FILENAME}: ${state.corpora.length} corpus/corpora.`);
-    } catch (error) {
+    void saveTextAsFile(DEFAULT_CORPORA_FILENAME, JSON.stringify(createSavedCorporaFile(state.corpora), null, 2)).then((fileName) => {
+      setCorpusStatus(`Saved ${state.corpora.length} corpus/corpora to ${fileName}.`, 'success');
+      addLog('success', 'corpora.save', `${fileName}: ${state.corpora.length} corpus/corpora.`);
+    }).catch((error) => {
+      if (isAbortError(error)) {
+        setCorpusStatus('Save canceled.', 'info');
+        addLog('info', 'corpora.save canceled', 'User canceled corpus list save.');
+        return;
+      }
       const message = getErrorMessage(error);
       setCorpusStatus(message, 'error');
       addLog('error', 'corpora.save failed', message);
-    }
+    });
   });
 
   loadCorporaButton.addEventListener('click', () => {
@@ -786,6 +803,24 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null;
 }
 
+async function saveTextAsFile(fileName: string, text: string): Promise<string> {
+  if (window.showSaveFilePicker) {
+    const handle = await window.showSaveFilePicker({
+      suggestedName: fileName,
+      types: [{
+        description: 'JSON files',
+        accept: { 'application/json': ['.json'] }
+      }]
+    });
+    const writable = await handle.createWritable();
+    await writable.write(new Blob([text], { type: 'application/json' }));
+    await writable.close();
+    return handle.name;
+  }
+  downloadText(fileName, text);
+  return fileName;
+}
+
 function downloadText(fileName: string, text: string): void {
   const url = URL.createObjectURL(new Blob([text], { type: 'application/json' }));
   const link = document.createElement('a');
@@ -796,6 +831,10 @@ function downloadText(fileName: string, text: string): void {
   link.click();
   link.remove();
   URL.revokeObjectURL(url);
+}
+
+function isAbortError(error: unknown): boolean {
+  return error instanceof DOMException && error.name === 'AbortError';
 }
 
 function renderCorpusList(container: HTMLElement, corpora: ManagedCorpus[], actions: { edit: (id: string) => void; remove: (id: string) => void }): void {
